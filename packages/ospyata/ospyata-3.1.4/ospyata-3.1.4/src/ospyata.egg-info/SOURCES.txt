@@ -1,0 +1,11 @@
+LICENSE
+README.md
+setup.cfg
+setup.py
+src/ospyata/__init__.py
+src/ospyata/__version__.py
+src/ospyata/osmata.py
+src/ospyata.egg-info/PKG-INFO
+src/ospyata.egg-info/SOURCES.txt
+src/ospyata.egg-info/dependency_links.txt
+src/ospyata.egg-info/top_level.txt

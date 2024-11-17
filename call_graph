@@ -1,0 +1,290 @@
+// Call Graph
+digraph {
+	rankdir=TB
+	node [shape=box]
+	subgraph cluster_ospyata {
+		node [color=white style=filled]
+		label=ospyata
+		color=lightgrey style=filled
+		ospyata
+	}
+	subgraph "cluster_Standard Library" {
+		node [color=white style=filled]
+		label="Standard Library"
+		color=lightgrey style=filled
+		"Standard Library"
+	}
+	subgraph "cluster_Built-in (sys)" {
+		node [color=white style=filled]
+		label="Built-in (sys)"
+		color=lightgrey style=filled
+		"Built-in (sys)"
+	}
+	"Standard Library" -> "_default_decoder.decode"
+	"Standard Library" -> _OptionError
+	"Standard Library" -> "hostinfo.partition"
+	"Standard Library" -> "name.split"
+	"Standard Library" -> "bpath.split"
+	"Standard Library" -> "onceregistry.get"
+	"Standard Library" -> "Built-in (sys)"
+	"Standard Library" -> "self.keywords.items"
+	"Standard Library" -> "_compiler.compile"
+	ospyata -> "Standard Library"
+	"Standard Library" -> "Third-Party Library (decoder)"
+	"Standard Library" -> "abstract_bases.append"
+	"Standard Library" -> "bs.rstrip"
+	"Standard Library" -> rstrip
+	"Standard Library" -> "_parser.State"
+	"Standard Library" -> "a.startswith"
+	"Standard Library" -> "m.group"
+	"Standard Library" -> "args.extend"
+	"Standard Library" -> "file.write"
+	"Standard Library" -> "f.write"
+	"Standard Library" -> "cls._flavour.join"
+	"Standard Library" -> quote_via
+	"Standard Library" -> "scheme.replace"
+	"Standard Library" -> "parsed.reverse"
+	"Standard Library" -> cls
+	"Standard Library" -> "host.rpartition"
+	"Standard Library" -> "pattern_parts.append"
+	ospyata -> "self.validate_url"
+	"Standard Library" -> "attr.partition"
+	"Standard Library" -> "a.__index__"
+	ospyata -> keys
+	"Standard Library" -> "Third-Party Library (encoder)"
+	"Standard Library" -> "self.match"
+	"Standard Library" -> "flavour.compile_pattern"
+	"Standard Library" -> "part.lstrip"
+	"Standard Library" -> "self._select_from"
+	"Standard Library" -> _HashedSeq
+	ospyata -> OspyataException
+	"Standard Library" -> "_default_encoder.encode"
+	"Standard Library" -> "obj.encode"
+	"Standard Library" -> "s.decode"
+	"Standard Library" -> _CacheInfo
+	"Standard Library" -> "self._flavour.join_parsed_parts"
+	"Standard Library" -> "_compile_repl.cache_clear"
+	"Standard Library" -> "fp.write"
+	"Standard Library" -> "self._make_child_relpath"
+	"Standard Library" -> add
+	"Standard Library" -> <unknown_function>
+	"Standard Library" -> "cache.get"
+	"Standard Library" -> _WindowsFlavour
+	"Standard Library" -> "bs.decode"
+	"Standard Library" -> "Built-in (builtins)"
+	"Standard Library" -> "netloc.replace"
+	"Standard Library" -> "category.rpartition"
+	"Standard Library" -> "parent_path._make_child_relpath"
+	"Standard Library" -> "safe.encode"
+	"Standard Library" -> cache_get
+	"Standard Library" -> join
+	"Standard Library" -> "cache.clear"
+	"Standard Library" -> lower
+	"Standard Library" -> "yielded.clear"
+	"Standard Library" -> "self._iterate_directories"
+	"Standard Library" -> "fixed.append"
+	"Standard Library" -> "qs.count"
+	"Standard Library" -> "selector.select_from"
+	"Standard Library" -> "self.with_name"
+	"Standard Library" -> "stuff.replace"
+	"Standard Library" -> "url.encode"
+	"Standard Library" -> "self.successor._select_from"
+	"Standard Library" -> bstartswith
+	"Standard Library" -> "path.split"
+	"Standard Library" -> "mod.match"
+	"Standard Library" -> "self.is_absolute"
+	"Standard Library" -> "self.cwd"
+	"Standard Library" -> "s.opengroup"
+	"Standard Library" -> "netloc.isascii"
+	"Standard Library" -> "self.is_dir"
+	"Standard Library" -> "self._split_extended_path"
+	"Standard Library" -> "netloc.rpartition"
+	"Standard Library" -> "self.scanner.scanner"
+	"Standard Library" -> _PosixFlavour
+	"Standard Library" -> "yielded.add"
+	"Standard Library" -> encode
+	"Standard Library" -> "url.find"
+	"Standard Library" -> "registry.get"
+	"Standard Library" -> match
+	"Standard Library" -> "name_value.split"
+	"Standard Library" -> fw
+	"Standard Library" -> "m.end"
+	"Standard Library" -> "url.replace"
+	"Standard Library" -> "bytes.fromhex"
+	"Standard Library" -> "_typeprog.match"
+	"Standard Library" -> decode
+	"Standard Library" -> "idx.indices"
+	"Standard Library" -> "self._format_parsed_parts"
+	"Standard Library" -> "urlsplit.cache_clear"
+	"Standard Library" -> "l.append"
+	"Standard Library" -> "format_string.format"
+	"Standard Library" -> "self._make_child"
+	"Standard Library" -> "s.lower"
+	"Standard Library" -> "port.partition"
+	"Standard Library" -> "globals.setdefault"
+	"Standard Library" -> "self._parse_args"
+	"Standard Library" -> "_parser.parse"
+	"Standard Library" -> "object.__new__"
+	"Standard Library" -> "self.exists"
+	"Standard Library" -> get
+	"Standard Library" -> "Standard Library"
+	"Standard Library" -> "self.mkdir"
+	"Standard Library" -> "x.decode"
+	"Standard Library" -> iterencode
+	"Standard Library" -> hint
+	"Standard Library" -> "n.replace"
+	"Standard Library" -> "Built-in"
+	"Standard Library" -> "part.replace"
+	"Standard Library" -> "self.splitroot"
+	"Standard Library" -> "self._decoded_counterpart"
+	"Standard Library" -> "args.append"
+	"Standard Library" -> "self._kwargs.items"
+	"Standard Library" -> "resolved_path.append"
+	"Standard Library" -> "self.parent.mkdir"
+	"Standard Library" -> "_byte_quoter_factory.cache_clear"
+	"Standard Library" -> "parsed.append"
+	"Standard Library" -> _Quoter
+	"Standard Library" -> "self.dispatcher.dispatch"
+	"Standard Library" -> "self._encoded_counterpart"
+	"Standard Library" -> lstrip
+	"Standard Library" -> _coerce_result
+	"Standard Library" -> scandir
+	"Standard Library" -> "line.strip"
+	"Standard Library" -> "self.parent.stat"
+	"Standard Library" -> "self.__class__"
+	"Standard Library" -> items
+	"Standard Library" -> "_parser.SubPattern"
+	"Standard Library" -> "path.as_posix"
+	"Standard Library" -> "self.chmod"
+	"Standard Library" -> "parts.append"
+	"Standard Library" -> "kwds.items"
+	"Standard Library" -> "f.read"
+	"Standard Library" -> "s.strip"
+	"Standard Library" -> "_ALWAYS_SAFE.union"
+	"Standard Library" -> cf
+	"Standard Library" -> "msg.match"
+	"Standard Library" -> user_function
+	"Standard Library" -> "s.closegroup"
+	"Standard Library" -> "_cache.clear"
+	"Standard Library" -> "self.func"
+	"Standard Library" -> "_portprog.fullmatch"
+	"Standard Library" -> "netloc.partition"
+	"Standard Library" -> "userinfo.partition"
+	"Standard Library" -> _TerminatingSelector
+	"Standard Library" -> "typ.__subclasses__"
+	"Standard Library" -> isascii
+	"Standard Library" -> "pat.find"
+	"Standard Library" -> "cls._flavour.parse_parts"
+	"Standard Library" -> "other_path.stat"
+	"Standard Library" -> "resolved_path.pop"
+	"Standard Library" -> "msg_lines.append"
+	"Standard Library" -> "hostname.startswith"
+	"Standard Library" -> "part.find"
+	"Standard Library" -> "suffix.startswith"
+	"Standard Library" -> "self._pathcls._from_parsed_parts"
+	"Standard Library" -> update
+	"Standard Library" -> function
+	"Standard Library" -> "scheme.strip"
+	"Standard Library" -> quoter
+	"Standard Library" -> getter
+	"Standard Library" -> "mro.append"
+	"Standard Library" -> sw
+	"Standard Library" -> "x.encode"
+	"Standard Library" -> "self.open"
+	"Standard Library" -> "self._make_unbound_method"
+	"Standard Library" -> "bracketed.partition"
+	"Standard Library" -> "entry.is_dir"
+	"Standard Library" -> "_asciire.split"
+	"Standard Library" -> "self.as_posix"
+	"Standard Library" -> "qs.split"
+	"Standard Library" -> "Built-in (_functools)"
+	"Standard Library" -> append
+	"Standard Library" -> "result.append"
+	"Standard Library" -> "chunks.append"
+	"Standard Library" -> "attr.split"
+	"Standard Library" -> "_compiler.isstring"
+	ospyata -> "self.check_existance"
+	"Standard Library" -> "self.relative_to"
+	"Standard Library" -> "fp.read"
+	"Standard Library" -> "self._flavour.casefold_parts"
+	"Standard Library" -> "port.isascii"
+	"Standard Library" -> _PathParents
+	"Standard Library" -> ParseResult
+	"Standard Library" -> "kwds.values"
+	"Standard Library" -> "registry.keys"
+	"Standard Library" -> "scheme.lower"
+	ospyata -> "f.close"
+	"Standard Library" -> "s.startswith"
+	"Standard Library" -> "pattern.translate"
+	ospyata -> "self.validate_omio"
+	"Standard Library" -> "name.endswith"
+	"Standard Library" -> "self._flavour.make_uri"
+	"Standard Library" -> "_parser.parse_template"
+	"Standard Library" -> partition
+	"Standard Library" -> "p.append"
+	"Standard Library" -> successor_select
+	"Standard Library" -> "found.sort"
+	"Standard Library" -> "abcs.remove"
+	ospyata -> "Built-in"
+	"Standard Library" -> mycmp
+	"Standard Library" -> "_default_encoder.iterencode"
+	ospyata -> exists
+	"Standard Library" -> "s.replace"
+	"Standard Library" -> SplitResult
+	"Standard Library" -> make_key
+	"Standard Library" -> "self._flavour.is_reserved"
+	"Standard Library" -> "nv.append"
+	"Standard Library" -> "_hostprog.match"
+	"Standard Library" -> "Built-in (_thread)"
+	"Standard Library" -> "found.append"
+	"Standard Library" -> DefragResult
+	"Standard Library" -> action
+	"Standard Library" -> "name.rfind"
+	"Standard Library" -> "hostname.lower"
+	"Standard Library" -> "dispatch_cache.clear"
+	"Standard Library" -> "self._flavour.parse_parts"
+	"Standard Library" -> "port.isdigit"
+	"Standard Library" -> "self._call"
+	"Standard Library" -> "_Selector.__init__"
+	"Standard Library" -> "rest.encode"
+	"Standard Library" -> obj
+	"Standard Library" -> "self._from_parsed_parts"
+	ospyata -> "data.keys"
+	"Standard Library" -> "self.lstat"
+	"Standard Library" -> "name.lstrip"
+	"Standard Library" -> "name.upper"
+	"Standard Library" -> "self.casefold"
+	"Standard Library" -> "url.lstrip"
+	"Standard Library" -> "self.dispatcher.register"
+	"Standard Library" -> "registry.clear"
+	"Standard Library" -> "Built-in (_warnings)"
+	"Standard Library" -> "self._from_parts"
+	"Standard Library" -> "p.lower"
+	"Standard Library" -> cache_len
+	"Standard Library" -> "url.split"
+	ospyata -> "f.read"
+	"Standard Library" -> "method.__get__"
+	"Standard Library" -> "rel.split"
+	"Standard Library" -> "r.append"
+	"Standard Library" -> "self.stat"
+	"Standard Library" -> "p.stat"
+	"Standard Library" -> replace
+	ospyata -> "self.db.keys"
+	"Standard Library" -> "hostname.partition"
+	"Standard Library" -> "cls._from_parts"
+	"Standard Library" -> "message.format"
+	"Standard Library" -> "user.partition"
+	"Standard Library" -> "_parser.expand_template"
+	"Standard Library" -> "query.items"
+	"Standard Library" -> "Built-in (pwd)"
+	"Standard Library" -> "url.rfind"
+	"Standard Library" -> WarningMessage
+	"Standard Library" -> "match.groups"
+	"Standard Library" -> isalpha
+	"Standard Library" -> "arg.split"
+	"Standard Library" -> "self._module._filters_mutated"
+	"Standard Library" -> startswith
+	"Standard Library" -> category
+	"Standard Library" -> "url.rpartition"
+	"Standard Library" -> strip
+}

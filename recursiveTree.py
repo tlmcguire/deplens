@@ -1,6 +1,6 @@
-import ast
 import builtins
 import importlib.util
+import ast
 import sys
 import os
 import sysconfig
@@ -45,14 +45,15 @@ def isStandardLibrary(moduleName):
     # Check if module_path is under any of the standard library paths
     return any(module_path.startswith(p) for p in stdlib_paths)
 
-def getLibraryName(filePath):
+def getLibraryName(filePath, rootDir):
     """Determines the library name for a given file path."""
     # Normalize paths for comparison
     stdlib_paths = [os.path.normpath(sysconfig.get_path('stdlib'))]
     filePath = os.path.normpath(filePath)
+    rootDir = os.path.normpath(rootDir)
 
-    if 'ospyata' in filePath:
-        return 'ospyata'
+    if filePath.startswith(rootDir):
+        return os.path.basename(rootDir)
     elif any(filePath.startswith(p) for p in stdlib_paths):
         return 'Standard Library'
     elif 'site-packages' in filePath or 'dist-packages' in filePath:
@@ -158,7 +159,7 @@ def extractUserDefinedFunctions(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
 
-def analyzePythonFile(filePath, depth, maxDepth, analyzed_files, fileLibraryMap, edges):
+def analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges):
     """Analyze a Python file to extract function call information."""
     if not os.path.exists(filePath):
         return
@@ -169,7 +170,7 @@ def analyzePythonFile(filePath, depth, maxDepth, analyzed_files, fileLibraryMap,
     analyzed_files.add(filePath)
 
     # Determine the library of the current file
-    fileLibraryMap[filePath] = getLibraryName(filePath)
+    fileLibraryMap[filePath] = getLibraryName(filePath, rootDir)
 
     try:
         with open(filePath, "r", encoding="utf-8", errors="ignore") as sourceFile:
@@ -193,25 +194,25 @@ def analyzePythonFile(filePath, depth, maxDepth, analyzed_files, fileLibraryMap,
             if libFilePath and libFilePath not in analyzed_files:
                 if os.path.isfile(libFilePath):
                     analyzePythonFile(
-                        libFilePath, depth + 1, maxDepth, analyzed_files, fileLibraryMap, edges
+                        libFilePath, rootDir, depth + 1, maxDepth, analyzed_files, fileLibraryMap, edges
                     )
 
-def analyzeDirectory(directory, depth, maxDepth, analyzed_files, fileLibraryMap, edges):
+def analyzeDirectory(directory, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges):
     """Recursively analyze Python files in a directory."""
     for root, _, files in os.walk(directory):
         for file in files:
             if file.endswith(".py"):
                 filePath = os.path.join(root, file)
-                analyzePythonFile(filePath, depth, maxDepth, analyzed_files, fileLibraryMap, edges)
+                analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges)
 
 if __name__ == "__main__":
-    directory = "./packages/ospyata/ospyata-3.1.4/ospyata-3.1.4/src/ospyata"
-    maxDepth = 2
+    directory = "./packages/pytorch/"
+    maxDepth = 4
     analyzed_files = set()
     fileLibraryMap = {}  # Map of file paths to library names
     edges = set()  # Set to store edges
 
-    analyzeDirectory(directory, 0, maxDepth, analyzed_files, fileLibraryMap, edges)
+    analyzeDirectory(directory, directory, 0, maxDepth, analyzed_files, fileLibraryMap, edges)
 
     # Create a new graph with clusters for each library
     new_graph = Digraph(comment='Call Graph')

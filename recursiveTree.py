@@ -6,6 +6,11 @@ import os
 import sysconfig
 from graphviz import Digraph
 
+# Configuration dictionary
+config = {
+    'exclude_libraries': ['Standard Library']
+}
+
 def isBuiltin(moduleName):
     """Returns True if a module is a built-in module."""
     return moduleName in sys.builtin_module_names
@@ -136,8 +141,9 @@ class FunctionCallVisitor(ast.NodeVisitor):
         callee_node = funcName
 
         if caller_node and callee_node:
-            self.edges.add((caller_node, callee_node))
-            self.graph.edge(caller_node, callee_node)
+            if callee_library not in config['exclude_libraries']:
+                self.edges.add((caller_node, callee_node))
+                self.graph.edge(caller_node, callee_node)
 
         self.generic_visit(node)
 
@@ -231,7 +237,7 @@ if __name__ == "__main__":
         'Standard Library': 'lightblue',
         'Third-Party Library': 'lightgreen',
         'Built-in': 'lightyellow',
-        'User-defined': 'lightcoral'
+        'User-defined': 'lightorange'
     }
     for lib in libraries:
         subg = Digraph(name=f'cluster_{lib}')

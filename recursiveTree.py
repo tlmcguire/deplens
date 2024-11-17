@@ -71,13 +71,14 @@ def getLibraryName(filePath, rootDir):
         return 'Unknown'
 
 class FunctionCallVisitor(ast.NodeVisitor):
-    def __init__(self, imports, userDefined, fileLibraryMap, filePath, edges):
+    def __init__(self, imports, userDefined, fileLibraryMap, filePath, edges, graph):
         self.imports = imports
         self.userDefined = userDefined
         self.visitedLibraries = set()
         self.fileLibraryMap = fileLibraryMap  # Map of file paths to library names
         self.currentFile = filePath
         self.edges = edges  # List to store edges
+        self.graph = graph  # Graphviz Digraph object
 
     def visit_Call(self, node):
         """Process a function call."""
@@ -131,11 +132,12 @@ class FunctionCallVisitor(ast.NodeVisitor):
                 callee_library = 'Unknown'
 
         # Add edge to the list if both nodes are valid
-        caller_node = self.fileLibraryMap.get(self.currentFile, 'Unknown')
-        callee_node = callee_library if callee_library != 'Unknown' else funcName
+        caller_node = os.path.basename(self.currentFile)
+        callee_node = funcName
 
         if caller_node and callee_node:
             self.edges.add((caller_node, callee_node))
+            self.graph.edge(caller_node, callee_node)
 
         self.generic_visit(node)
 
@@ -159,7 +161,7 @@ def extractUserDefinedFunctions(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
 
-def analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges):
+def analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges, graph):
     """Analyze a Python file to extract function call information."""
     if not os.path.exists(filePath):
         return
@@ -186,7 +188,7 @@ def analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLi
     imports = extractImports(tree)
     userDefined = extractUserDefinedFunctions(tree)
 
-    visitor = FunctionCallVisitor(imports, userDefined, fileLibraryMap, filePath, edges)
+    visitor = FunctionCallVisitor(imports, userDefined, fileLibraryMap, filePath, edges, graph)
     visitor.visit(tree)
 
     if depth < maxDepth:
@@ -194,10 +196,10 @@ def analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLi
             if libFilePath and libFilePath not in analyzed_files:
                 if os.path.isfile(libFilePath):
                     analyzePythonFile(
-                        libFilePath, rootDir, depth + 1, maxDepth, analyzed_files, fileLibraryMap, edges
+                        libFilePath, rootDir, depth + 1, maxDepth, analyzed_files, fileLibraryMap, edges, graph
                     )
 
-def analyzeDirectory(directory, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges):
+def analyzeDirectory(directory, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges, graph):
     """Recursively analyze Python files in a directory."""
     if depth > maxDepth:
         return
@@ -206,46 +208,52 @@ def analyzeDirectory(directory, rootDir, depth, maxDepth, analyzed_files, fileLi
             if file.endswith(".py"):
                 filePath = os.path.join(root, file)
                 if filePath != os.path.abspath(__file__):  # Avoid analyzing the script itself
-                    analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges)
+                    analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges, graph)
 
 if __name__ == "__main__":
-    directory = "./packages/pytorch/"
+    directory = "./packages/flask/"
     maxDepth = 4
     analyzed_files = set()
     fileLibraryMap = {}  # Map of file paths to library names
     edges = set()  # Set to store edges
 
-    analyzeDirectory(directory, directory, 0, maxDepth, analyzed_files, fileLibraryMap, edges)
-
     # Create a new graph with clusters for each library
-    new_graph = Digraph(comment='Call Graph')
-    new_graph.attr(rankdir='TB')  # Set the graph direction to Top to Bottom
-    new_graph.attr('node', shape='box')
+    graph = Digraph(comment='Call Graph')
+    graph.attr(rankdir='TB')  # Set the graph direction to Top to Bottom
+    graph.attr('node', shape='box')
+
+    analyzeDirectory(directory, directory, 0, maxDepth, analyzed_files, fileLibraryMap, edges, graph)
 
     # Create subgraphs for each library
     libraries = set(fileLibraryMap.values())
     subgraphs = {}
+    library_colors = {
+        'Standard Library': 'lightblue',
+        'Third-Party Library': 'lightgreen',
+        'Built-in': 'lightyellow',
+        'User-defined': 'lightcoral'
+    }
     for lib in libraries:
         subg = Digraph(name=f'cluster_{lib}')
         subg.attr(label=lib)
-        subg.attr(style='filled', color='lightgrey')
+        subg.attr(style='filled', color=library_colors.get(lib, 'lightgrey'))
         subg.node_attr.update(style='filled', color='white')
         subgraphs[lib] = subg
 
     # Add nodes to subgraphs
     nodes_in_subgraphs = {}
     for filePath, lib in fileLibraryMap.items():
-        node_name = lib
-        if node_name not in nodes_in_subgraphs:
-            subgraphs[lib].node(node_name)
-            nodes_in_subgraphs[node_name] = lib
+        file_node = os.path.basename(filePath)
+        if file_node not in nodes_in_subgraphs:
+            subgraphs[lib].node(file_node)
+            nodes_in_subgraphs[file_node] = lib
 
     # Add subgraphs to the main graph
     for subg in subgraphs.values():
-        new_graph.subgraph(subg)
+        graph.subgraph(subg)
 
     # Add edges
     for src, dst in edges:
-        new_graph.edge(src, dst)
+        graph.edge(src, dst)
 
-    new_graph.render('call_graph', format='pdf', view=True)
+    graph.render('call_graph', format='pdf', view=True)

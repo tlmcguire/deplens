@@ -1,6 +1,6 @@
+import ast
 import builtins
 import importlib.util
-import ast
 import sys
 import os
 import sysconfig
@@ -114,7 +114,7 @@ class FunctionCallVisitor(ast.NodeVisitor):
             elif parts and len(parts) > 1 and parts[0] in sys.modules:
                 moduleName = parts[0]
 
-            if moduleName:
+            if moduleName and moduleName != "__main__":
                 if isBuiltinImport(moduleName):
                     callee_library = f"Built-in ({moduleName})"
                 elif isStandardLibrary(moduleName):
@@ -199,11 +199,14 @@ def analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLi
 
 def analyzeDirectory(directory, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges):
     """Recursively analyze Python files in a directory."""
+    if depth > maxDepth:
+        return
     for root, _, files in os.walk(directory):
         for file in files:
             if file.endswith(".py"):
                 filePath = os.path.join(root, file)
-                analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges)
+                if filePath != os.path.abspath(__file__):  # Avoid analyzing the script itself
+                    analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges)
 
 if __name__ == "__main__":
     directory = "./packages/pytorch/"

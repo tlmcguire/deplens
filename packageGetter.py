@@ -3,6 +3,7 @@ import os
 import tarfile
 import time
 import json
+import ast
 import sys
 import pkgutil
 
@@ -77,8 +78,33 @@ def dl_packages(packages, target_directory):
     if failed_packages:
         print(f"{len(failed_packages)} packages failed to download: {failed_packages}")
 
-def download_and_extract(packages, target_directory):
-    """Download specified packages and extract them."""
+def parse_imports(directory):
+    imports = set()
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(".py"):
+                file_path = os.path.join(root, file)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        try:
+                            tree = ast.parse(f.read(), filename=file_path)
+                            for node in ast.walk(tree):
+                                if isinstance(node, ast.Import):
+                                    imports.update(alias.name for alias in node.names)
+                                elif isinstance(node, ast.ImportFrom):
+                                    if node.module:
+                                        imports.add(node.module)
+                        except (SyntaxError, UnicodeDecodeError) as e:
+                            print(f"Error parsing {file_path}: {e}")
+                except (UnicodeDecodeError, FileNotFoundError) as e:
+                    print(f"Skipping {file_path} due to encoding issues or file not found: {e}")
+    return imports
+
+def download_and_parse_recursively(packages, target_directory, current_depth=0, max_depth=3):
+    """Recursively download and parse packages with a depth limit."""
+    if not packages or current_depth > max_depth:
+        return
+    
     for package in packages:
         if package in downloaded_packages or package in builtin_modules:
             continue  # Skip already downloaded or built-in modules
@@ -113,12 +139,18 @@ def download_and_extract(packages, target_directory):
                     extract_dir = os.path.splitext(os.path.splitext(tar_file)[0])[0]
                     tar_ref.extractall(extract_dir)
                     print(f"Extracted {tar_file} to {extract_dir}")
+                    
+                    new_imports = parse_imports(extract_dir)
+                    print(f"Imports found in {package}: {new_imports}")
+                    
+                    # Recursively parse new imports with increased depth
+                    download_and_parse_recursively(new_imports - downloaded_packages, target_directory, current_depth + 1, max_depth)
             except (tarfile.ReadError, tarfile.CompressionError) as e:
                 print(f"Failed to extract {tar_file}: {e}")
 
 # Initial call
 test_packages = ['ospyata']
 download_directory = './packages/'
-download_and_extract(test_packages, download_directory)
+download_and_parse_recursively(test_packages, download_directory, max_depth=4)
 
-print("Download and extraction process completed.")
+print("Recursive download and parsing process completed.")

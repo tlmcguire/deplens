@@ -90,15 +90,17 @@ def parse_imports(directory):
                             tree = ast.parse(f.read(), filename=file_path)
                             for node in ast.walk(tree):
                                 if isinstance(node, ast.Import):
-                                    imports.update(alias.name for alias in node.names)
+                                    for alias in node.names:
+                                        imports.add(alias.name.split('.')[0])  # Cutoff submodule, get top-level package
                                 elif isinstance(node, ast.ImportFrom):
                                     if node.module:
-                                        imports.add(node.module)
+                                        imports.add(node.module.split('.')[0])  # Cutoff submodule, get top-level package
                         except (SyntaxError, UnicodeDecodeError) as e:
                             print(f"Error parsing {file_path}: {e}")
                 except (UnicodeDecodeError, FileNotFoundError) as e:
                     print(f"Skipping {file_path} due to encoding issues or file not found: {e}")
     return imports
+
 
 def download_and_parse_recursively(packages, target_directory, current_depth=0, max_depth=3):
     """Recursively download and parse packages with a depth limit."""

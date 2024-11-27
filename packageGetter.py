@@ -101,7 +101,6 @@ def parse_imports(directory):
                     print(f"Skipping {file_path} due to encoding issues or file not found: {e}")
     return imports
 
-
 def download_and_parse_recursively(packages, target_directory, current_depth=0, max_depth=3):
     """Recursively download and parse packages with a depth limit."""
     if not packages or current_depth > max_depth:
@@ -151,7 +150,7 @@ def download_and_parse_recursively(packages, target_directory, current_depth=0, 
                 print(f"Failed to extract {tar_file}: {e}")
 
 # Initial call
-test_packages = ['ospyata']
+test_packages = ['flask']
 download_directory = './packages/'
 download_and_parse_recursively(test_packages, download_directory, max_depth=4)
 

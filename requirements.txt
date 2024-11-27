@@ -1,2 +1,4 @@
 requests==2.31.0
 graphviz==0.20.3
+pipdeptree==2.23.4
+graphviz==0.20.3

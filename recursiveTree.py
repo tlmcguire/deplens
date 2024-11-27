@@ -103,6 +103,8 @@ class FunctionCallVisitor(ast.NodeVisitor):
             # Handle other types of node.func, set a placeholder name
             funcName = "<unknown_function>"
 
+        print(f"Function call found: {funcName}")
+
         # Determine the library of the callee function
         callee_library = 'Unknown'
         if funcName in dir(builtins):
@@ -136,6 +138,8 @@ class FunctionCallVisitor(ast.NodeVisitor):
             else:
                 callee_library = 'Unknown'
 
+        print(f"Caller: {os.path.basename(self.currentFile)}, Callee: {funcName}, Library: {callee_library}")
+
         # Add edge to the list if both nodes are valid
         caller_node = os.path.basename(self.currentFile)
         callee_node = funcName
@@ -158,37 +162,45 @@ def extractImports(tree):
             module = node.module
             for alias in node.names:
                 imports[alias.asname or alias.name] = module
+    print(f"Imports extracted: {imports}")
     return imports
 
 def extractUserDefinedFunctions(tree):
     """Extract user-defined function names from the AST."""
-    return {
+    user_defined = {
         node.name for node in ast.walk(tree)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
+    print(f"User-defined functions extracted: {user_defined}")
+    return user_defined
 
 def analyzePythonFile(filePath, rootDir, depth, maxDepth, analyzed_files, fileLibraryMap, edges, graph):
     """Analyze a Python file to extract function call information."""
     if not os.path.exists(filePath):
+        print(f"File does not exist: {filePath}")
         return
 
     if filePath in analyzed_files:
+        print(f"File already analyzed: {filePath}")
         return  # Avoid re-analyzing the same file
 
     analyzed_files.add(filePath)
 
     # Determine the library of the current file
     fileLibraryMap[filePath] = getLibraryName(filePath, rootDir)
+    print(f"Analyzing file: {filePath}, Library: {fileLibraryMap[filePath]}")
 
     try:
         with open(filePath, "r", encoding="utf-8", errors="ignore") as sourceFile:
             code = sourceFile.read()
-    except Exception:
+    except Exception as e:
+        print(f"Error reading file {filePath}: {e}")
         return
 
     try:
         tree = ast.parse(code)
-    except SyntaxError:
+    except SyntaxError as e:
+        print(f"Syntax error in file {filePath}: {e}")
         return
 
     imports = extractImports(tree)
@@ -228,6 +240,7 @@ if __name__ == "__main__":
     graph.attr(rankdir='TB')  # Set the graph direction to Top to Bottom
     graph.attr('node', shape='box')
 
+    print(f"Starting analysis in directory: {directory}")
     analyzeDirectory(directory, directory, 0, maxDepth, analyzed_files, fileLibraryMap, edges, graph)
 
     # Create subgraphs for each library
@@ -262,4 +275,6 @@ if __name__ == "__main__":
     for src, dst in edges:
         graph.edge(src, dst)
 
+    print("Rendering graph...")
     graph.render('call_graph', format='pdf', view=True)
+    print("Graph rendered successfully.")

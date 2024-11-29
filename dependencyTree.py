@@ -8,6 +8,9 @@ import json
 import requests
 import time
 import tarfile
+import ast
+import astor
+import importlib
 
 def install_package(package_name):
     """Install a package using pip."""
@@ -18,135 +21,149 @@ def install_package(package_name):
         print(f"Failed to install {package_name}: {e}")
 
 def run_pipdeptree(package_name):
-    """Run pipdeptree to generate the dependency tree as a PNG and JSON."""
+    """Generate dependency tree as PNG and JSON using pipdeptree."""
     output_dir = '/graphs'
     os.makedirs(output_dir, exist_ok=True)
 
-    png_command = ['pipdeptree', '-p', package_name, '--graph-output', 'png']
-    json_command = ['pipdeptree', '-p', package_name, '--json-tree']
+    png_file = os.path.join(output_dir, f"{package_name}_dependency_tree.png")
+    json_file = os.path.join(output_dir, f"{package_name}_dependency_tree.json")
 
-    try:
-        # Generate PNG file for the dependency tree
-        png_output_file = os.path.join(output_dir, f"{package_name}_dependency_tree.png")
-        with open(png_output_file, 'wb') as f:
-            subprocess.run(png_command, stdout=f, stderr=subprocess.PIPE, check=True)
-        
-        print(f"Dependency tree saved as {png_output_file}")
+    subprocess.run(['pipdeptree', '-p', package_name, '--graph-output', 'png'], stdout=open(png_file, 'wb'))
+    result = subprocess.run(['pipdeptree', '-p', package_name, '--json-tree'], stdout=subprocess.PIPE)
+    with open(json_file, 'w') as f:
+        json.dump(json.loads(result.stdout.decode('utf-8')), f, indent=4)
 
-        # Generate JSON file for the dependency tree
-        json_output_file = os.path.join(output_dir, f"{package_name}_dependency_tree.json")
-        with open(json_output_file, 'w', encoding='utf-8') as f:
-            result = subprocess.run(json_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-            json_data = result.stdout.decode('utf-8')
-            json.dump(json.loads(json_data), f, ensure_ascii=False, indent=4)
-        
-        print(f"Dependency tree saved as {json_output_file}")
-
-    except subprocess.CalledProcessError as e:
-        print(f"Error executing pipdeptree: {e.stderr.decode('utf-8')}")
+    print(f"Dependency tree saved as {png_file} and {json_file}")
 
 def parse_json_for_packages(json_file):
-    """Parse the JSON file and return a set of package names including dependencies."""
-    try:
-        with open(json_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        packages = set()
-        
-        def traverse(node):
-            package_name = node.get('package_name')
-            if package_name:
-                packages.add(package_name)
-            else:
-                print(f"Missing 'package_name' in node: {node}")
-            for child in node.get('dependencies', []):
-                traverse(child)
-        
-        for node in data:
-            traverse(node)
-        
-        return packages
-        
-    except (json.JSONDecodeError, FileNotFoundError) as e:
-        print(f"Error reading JSON file: {e}")
-        return set()
-
-def download_package(package, package_dir, retries=3, delay=1):
-    """Download a package from PyPI given its name."""
-    success = False
-    while retries > 0 and not success:
-        try:
-            # Fetch package information from PyPI
-            r = requests.get(f"https://pypi.org/pypi/{package}/json")
-            r.raise_for_status()  # Check if the request was successful
-            d = r.json()
-
-            # Look for the first sdist package
-            for url in d["urls"]:
-                if url["packagetype"] == "sdist":
-                    download_url = url["url"]
-                    print(f"Downloading {package} from {download_url}")
-                    response = requests.get(download_url)
-                    response.raise_for_status()  # Ensure successful download
-
-                    # Save the downloaded file
-                    file_name = os.path.basename(download_url)
-                    os.makedirs(package_dir, exist_ok=True)
-                    with open(os.path.join(package_dir, file_name), 'wb') as file:
-                        file.write(response.content)
-
-                    print(f"Downloaded {package} into {package_dir}/{file_name}")
-                    success = True
-                    break
-            if not success:
-                print(f"No sdist found for {package}, retrying...")
-                retries -= 1
-                time.sleep(delay)
-        except requests.exceptions.RequestException as e:
-            print(f"Error downloading {package}: {e}")
-            retries -= 1
-            time.sleep(delay)
+    """Extract package names from pipdeptree JSON."""
+    with open(json_file) as f:
+        data = json.load(f)
     
-    if not success:
-        print(f"Failed to download {package} after {3 - retries} retries.")
+    packages = set()
 
-def download_packages_from_json(json_file, download_dir):
-    """Download all packages from the JSON dependency tree."""
-    package_names = parse_json_for_packages(json_file)
+    def traverse(node):
+        if "package_name" in node:
+            packages.add(node["package_name"])
+        for child in node.get("dependencies", []):
+            traverse(child)
 
-    # Download each package
-    successful_downloads = 0
+    for node in data:
+        traverse(node)
+    
+    return packages
+
+def download_and_extract_packages(package_names, download_dir):
+    """Download and extract source packages from PyPI."""
+    os.makedirs(download_dir, exist_ok=True)
+
     for package in package_names:
-        print(f"Attempting to download package: {package}")
-        download_package(package, download_dir)
-        successful_downloads += 1
+        try:
+            print(f"Downloading {package} from PyPI...")
+            response = requests.get(f"https://pypi.org/pypi/{package}/json")
+            urls = response.json().get('urls', [])
 
-    print(f"Successfully downloaded {successful_downloads}/{len(package_names)} packages.")
+            for url in urls:
+                if url['packagetype'] == 'sdist':
+                    tarball_url = url['url']
+                    tarball_response = requests.get(tarball_url)
+                    tarball_filename = os.path.basename(tarball_url)
+                    tarball_path = os.path.join(download_dir, tarball_filename)
 
-def extract_packages(package_dir):
-    """Extract all .tar.gz files in the specified directory."""
-    for filename in os.listdir(package_dir):
-        if filename.endswith('.tar.gz'):
-            file_path = os.path.join(package_dir, filename)
+                    with open(tarball_path, 'wb') as file:
+                        file.write(tarball_response.content)
+
+                    print(f"Extracting {tarball_path}...")
+                    with tarfile.open(tarball_path, 'r:gz') as tar:
+                        tar.extractall(path=download_dir)
+
+                    # Rename the extracted directory
+                    extracted_dir = tarball_filename.replace('.tar.gz', '')
+                    src_dir = os.path.join(download_dir, extracted_dir)
+                    dst_dir = os.path.join(download_dir, package)
+                    if os.path.exists(src_dir):
+                        os.rename(src_dir, dst_dir)
+        except Exception as e:
+            print(f"Failed to download {package}: {e}")
+
+def search_function_definitions(root_dir, function_name):
+    """Search for a specific function definition in all Python files."""
+    for subdir, _, files in os.walk(root_dir):
+        for file in files:
+            if file.endswith(".py"):
+                file_path = os.path.join(subdir, file)
+                with open(file_path, 'r') as f:
+                    tree = ast.parse(f.read())
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.FunctionDef) and node.name == function_name:
+                            print(f"Found '{function_name}' in {file_path}")
+                            return file_path, node
+
+class FunctionRenamer(ast.NodeTransformer):
+    def __init__(self, target_name, new_name):
+        self.target_name = target_name
+        self.new_name = new_name
+
+    def visit_FunctionDef(self, node):
+        if node.name == self.target_name:
+            print(f"Renaming function '{node.name}' to '{self.new_name}'")
+            node.name = self.new_name
+        self.generic_visit(node)
+        return node
+
+def modify_function_ast(file_path, target_name, new_name):
+    """Modify the function's name in the AST and rewrite the file."""
+    with open(file_path, 'r') as f:
+        tree = ast.parse(f.read())
+
+    renamer = FunctionRenamer(target_name, new_name)
+    new_tree = renamer.visit(tree)
+
+    new_code = ast.unparse(new_tree)
+
+    with open(file_path, 'w') as f:
+        f.write(new_code)
+
+    print(f"Modified {file_path} and renamed function to '{new_name}'")
+
+def load_local_packages(packages_dir):
+    """Dynamically load modified packages."""
+    sys.path.insert(0, packages_dir)
+    for package_name in os.listdir(packages_dir):
+        package_path = os.path.join(packages_dir, package_name)
+        if os.path.isdir(package_path):
             try:
-                with tarfile.open(file_path, 'r:gz') as tar:
-                    tar.extractall(path=package_dir)
-                print(f"Extracted {filename}")
-            except tarfile.TarError as e:
-                print(f"Error extracting {filename}: {e}")
+                importlib.import_module(package_name)
+                print(f"Loaded {package_name}")
+            except Exception as e:
+                print(f"Error loading {package_name}: {e}")
 
-# Example usage
 if __name__ == "__main__":
-    package = 'flask'  # Replace with the desired package name
+    package = 'flask'  # Change this to the desired package
     install_package(package)
     run_pipdeptree(package)
-    
-    # Path where packages will be downloaded
-    download_dir = '/packages'
 
-    # After running pipdeptree and saving the JSON, call the download function
+    packages_dir = '/packages'
+    download_dir = packages_dir
+
     json_file = f'/graphs/{package}_dependency_tree.json'
-    download_packages_from_json(json_file, download_dir)
+    package_names = parse_json_for_packages(json_file)
 
-    # Extract the downloaded packages
-    extract_packages(download_dir)
+    download_and_extract_packages(package_names, download_dir)
+
+    function_name = 'visit_ScopedEvalContextModifier'  # Function to search for
+    new_function_name = 'modified_visit_ScopedEvalContextModifier'  # New function name
+
+    for pkg in os.listdir(download_dir):
+        pkg_path = os.path.join(download_dir, pkg)
+        package_name = os.path.basename(pkg_path).split('-')[0]
+        result = search_function_definitions(pkg_path, function_name)
+        if result:
+            file_path, node = result
+            modify_function_ast(file_path, function_name, new_function_name)
+            break
+
+    load_local_packages(download_dir)
+    print("Ready to test with modified dependencies.")
+    # Import the main package to test
+    module = importlib.import_module(package)

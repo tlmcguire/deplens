@@ -1,6 +1,6 @@
 # VulnTracer
 
-VulnTracer is a Python-based tool designed to assist in downloading and analyzing packages to trace potential vulnerabilities. 
+VulnTracer is a containerized Python tool designed to assist in downloading and analyzing packages to trace potential bugs and vulnerabilities. 
 
 ## Usage Guide
 1. Specify packages to download using `packageGetter.py` by updating `test_packages` variable.

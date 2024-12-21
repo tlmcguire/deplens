@@ -1,15 +1,13 @@
 # docker build -t dep-tree .
-# docker run --rm -v "$(pwd)/graphs:/graphs" dep-tree
+# docker run --rm -it -v "$(pwd)/graphs:/graphs" dep-tree
 
 import subprocess
 import sys
 import os
 import json
 import requests
-import time
 import tarfile
 import ast
-import astor
 import importlib
 
 def install_package(package_name):
@@ -138,6 +136,11 @@ def load_local_packages(packages_dir):
             except Exception as e:
                 print(f"Error loading {package_name}: {e}")
 
+def visualize_ast(file_paths):
+    """Visualize the AST of the specified Python files using astvisualizer.py."""
+    for file_path in file_paths:
+        subprocess.run(['python', 'astvisualizer.py', '-f', file_path])
+
 if __name__ == "__main__":
     package = 'flask'  # Change this to the desired package
     install_package(package)
@@ -150,6 +153,34 @@ if __name__ == "__main__":
     package_names = parse_json_for_packages(json_file)
 
     download_and_extract_packages(package_names, download_dir)
+
+    # Print the packages found
+    print("Packages found:")
+    packages_list = [pkg for pkg in os.listdir(download_dir) if not pkg.endswith('.tar.gz')]
+    for i, pkg in enumerate(packages_list):
+        print(f"{i + 1}. {pkg}")
+
+    # Prompt the user to select a package
+    selected_package_index = int(input("Enter the number of the package to visualize: ")) - 1
+    selected_package = packages_list[selected_package_index]
+
+    # Print the Python files found in the selected package
+    selected_package_dir = os.path.join(download_dir, selected_package)
+    python_files = []
+    for subdir, _, files in os.walk(selected_package_dir):
+        for file in files:
+            if file.endswith(".py"):
+                python_files.append(os.path.join(subdir, file))
+
+    print("Python files found:")
+    for i, file in enumerate(python_files):
+        print(f"{i + 1}. {file}")
+
+    # Prompt the user to select files to visualize
+    selected_files = input("Enter the numbers of the files to visualize (comma-separated): ")
+    selected_files = [python_files[int(i) - 1] for i in selected_files.split(",")]
+
+    visualize_ast(selected_files)
 
     function_name = 'visit_ScopedEvalContextModifier'  # Function to search for
     new_function_name = 'modified_visit_ScopedEvalContextModifier'  # New function name

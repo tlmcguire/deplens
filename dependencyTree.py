@@ -1,5 +1,5 @@
-# docker build -t dep-tree .
-# docker run --rm -it -v "$(pwd)/graphs:/graphs" dep-tree
+# docker build -t deplens .
+# docker run --rm -it -v "$(pwd)/graphs:/graphs" deplens
 
 import subprocess
 import sys

@@ -17,8 +17,8 @@ python astvisualizer.py -f your_file.py
 ### Command Line Arguments
 - `-f, --file`: Read Python code from specified file
 - `-l, --label`: Set custom label for visualization
-- `-n, --node-styles`: JSON string specifying node styles 
-- `-e, --edge-styles`: JSON string specifying edge styles
+- `-n, --node-styles`: JSON string specifying node styles (e.g. color, shape, etc.)
+- `-e, --edge-styles`: JSON string specifying edge styles (e.g. color, solid, dashed, etc.)
 
 ### Style Configuration
 Node styles can be applied to specific AST node types:

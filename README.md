@@ -45,9 +45,4 @@ python astvisualizer.py -f example.py \
 ```
 
 ### Output
-Generated visualizations are saved as PDF files in the 
-
-graphs
-
- directory.
-```
+Generated visualizations are saved as PDF files in the graphs directory.

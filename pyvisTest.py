@@ -40,7 +40,9 @@ def map_data(g, pkg_data, parent=None, edge_color="#018786", node_color="#018786
     :param node_shape: Shape of nodes.
     """
     name = pkg_data["package_name"]
-    g.add_node(name, label=name, title=f"Version: {pkg_data['installed_version']}", color=node_color, shape=node_shape)
+    version = pkg_data["installed_version"]
+    label = f"{name}\nv{version}"  # Add version to label
+    g.add_node(name, label=label, title=f"Version: {version}", color=node_color, shape=node_shape)
 
     if parent:
         g.add_edge(parent, name, color=edge_color)

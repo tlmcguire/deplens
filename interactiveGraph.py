@@ -1,5 +1,5 @@
 # docker build -t deplens .
-# docker run --rm -it -p 8050:8050 -v "$(pwd)/graphs:/graphs" deplens
+# docker run --rm -it -p 8080:8080 -v "$(pwd)/graphs:/graphs" deplens
 
 from dash import Dash, html, dcc
 import dash_cytoscape as cyto
@@ -211,4 +211,4 @@ if __name__ == "__main__":
     # Ensure the graphs directory exists
     os.makedirs("graphs", exist_ok=True)
     
-    app.run(debug=True, host='0.0.0.0', port=8050)
+    app.run(debug=True, host='0.0.0.0', port=8080)

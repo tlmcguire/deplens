@@ -173,10 +173,10 @@ app.layout = html.Div([
              }},
             {'selector': 'edge', 
              'style': {
-                 'line-color': '#00FFFF',  # teal
+                 'line-color': '#018786',
                  'width': 2,
                  'curve-style': 'bezier',
-                 'target-arrow-color': '#00FFFF',  # teal
+                 'target-arrow-color': '#018786',
                  'target-arrow-shape': 'triangle',
                  'arrow-scale': 2,
                  'target-arrow-fill': 'filled'

@@ -146,9 +146,9 @@ app = Dash(__name__)
 
 app.layout = html.Div([
     html.Div([
-        html.H1("DepLens", style={'text-align': 'center', 'color': 'white'}),
-        html.Div(id='output-div', style={'padding': '10px', 'color': 'white'})
-    ], style={'background-color': '#222222', 'padding': '20px'}),
+        html.H1("DepLens", style={'text-align': 'left', 'color': 'white'}),
+        html.Div(id='output-div', style={'padding': '2px', 'color': 'white'})
+    ], style={'background-color': '#222222', 'padding': '3px'}),
     cyto.Cytoscape(
         id='cytoscape',
         layout={'name': 'breadthfirst'},
@@ -162,21 +162,21 @@ app.layout = html.Div([
                  'text-wrap': 'wrap', 
                  'text-valign': 'center', 
                  'text-halign': 'center',
-                 'shape': 'rectangle',
-                 'width': '120px',          # Increased width
-                 'height': '50px',          # Increased height
+                 'shape': 'round-rectangle',
+                 'width': '100px',
+                 'height': '50px',
                  'background-color': '#333333',
                  'border-width': '2px',
-                 'border-color': '#333333', # Match background color
-                 'border-radius': '100px',   # Increased roundness
-                 'padding': '3px'          # Add padding
+                 'border-color': '#333333',
+                 'border-radius': '5%',
+                 'padding': '2px'
              }},
             {'selector': 'edge', 
              'style': {
-                 'line-color': '#00FFFF',  # Changed to teal
+                 'line-color': '#00FFFF',  # teal
                  'width': 2,
                  'curve-style': 'bezier',
-                 'target-arrow-color': '#00FFFF',  # Changed to teal
+                 'target-arrow-color': '#00FFFF',  # teal
                  'target-arrow-shape': 'triangle',
                  'arrow-scale': 2,
                  'target-arrow-fill': 'filled'

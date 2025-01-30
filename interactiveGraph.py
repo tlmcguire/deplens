@@ -185,17 +185,6 @@ app.layout = html.Div([
     )
 ])
 
-# Callback to display information on node click
-@app.callback(
-    Output('output-div', 'children'),
-    [Input('cytoscape', 'tapNodeData')]
-)
-def display_click_data(data):
-    if data:
-        return f"Package: {data['label']}"
-    return "Click a node to see details."
-
-
 if __name__ == "__main__":
     install_package(package)
     run_pipdeptree(package)

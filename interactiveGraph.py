@@ -14,8 +14,19 @@ import ast
 import importlib
 import shutil
 
-package = 'flask' # Change this to the desired package
-file = f"/graphs/{package}_dependency_tree.json" # Load the JSON dependency tree
+# Global variables
+initialized = False
+package = 'flask'
+elements = []  # Default empty list
+vulnerable_packages = ["werkzeug", "click"]
+
+def is_package_installed(package_name):
+    """Check if package is already installed."""
+    try:
+        importlib.import_module(package_name)
+        return True
+    except ImportError:
+        return False
 
 def install_package(package_name):
     """Install a package using pip."""
@@ -33,12 +44,26 @@ def run_pipdeptree(package_name):
     png_file = os.path.join(output_dir, f"{package_name}_dependency_tree.png")
     json_file = os.path.join(output_dir, f"{package_name}_dependency_tree.json")
 
-    subprocess.run(['pipdeptree', '-p', package_name, '--graph-output', 'png'], stdout=open(png_file, 'wb'))
-    result = subprocess.run(['pipdeptree', '-p', package_name, '--json-tree'], stdout=subprocess.PIPE)
-    with open(json_file, 'w') as f:
-        json.dump(json.loads(result.stdout.decode('utf-8')), f, indent=4)
-
-    print(f"Dependency tree saved as {png_file} and {json_file}")
+    try:
+        subprocess.run(['pipdeptree', '-p', package_name, '--graph-output', 'png'], 
+                      stdout=open(png_file, 'wb'), check=True)
+        result = subprocess.run(['pipdeptree', '-p', package_name, '--json-tree'], 
+                              stdout=subprocess.PIPE, check=True)
+        
+        # Verify JSON output is valid
+        try:
+            json_data = json.loads(result.stdout.decode('utf-8'))
+            with open(json_file, 'w') as f:
+                json.dump(json_data, f, indent=4)
+        except json.JSONDecodeError:
+            print(f"Invalid JSON output for {package_name}")
+            return False
+            
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to generate dependency tree: {e}")
+        return False
+    
+    return True
 
 def parse_json_for_packages(json_file):
     """Extract package names from pipdeptree JSON."""
@@ -67,16 +92,36 @@ def clean_package_directory(package_name):
     except Exception as e:
         print(f"Error cleaning directory for {package_name}: {e}")
 
+def get_json_filepath(package_name):
+    """Get the filepath for a package's JSON dependency tree."""
+    return f"/graphs/{package_name}_dependency_tree.json"
+
+def get_data(package_name):
+    """Load or create the dependency tree data from a JSON file."""
+    filepath = get_json_filepath(package_name)
+    
+    # Create JSON if it doesn't exist
+    if not os.path.exists(filepath):
+        if not is_package_installed(package_name):
+            install_package(package_name)
+        run_pipdeptree(package_name)
+    
+    # Load and return JSON data
+    with open(filepath, "r") as json_file:
+        data = json.load(json_file)
+        return data
+
 def download_and_extract_packages(package_names, download_dir):
     """Download and extract source packages from PyPI."""
     os.makedirs(download_dir, exist_ok=True)
 
-    # Load main package JSON using global file variable
+    # Load main package JSON
+    filepath = get_json_filepath(package)
     try:
-        with open(file, "r") as f:
+        with open(filepath, "r") as f:
             dependency_tree = json.load(f)
     except FileNotFoundError:
-        print(f"JSON file not found: {file}")
+        print(f"JSON file not found: {filepath}")
         return None
 
     def update_package_paths(packages):
@@ -125,16 +170,10 @@ def download_and_extract_packages(package_names, download_dir):
 
     # Update paths and save
     update_package_paths(dependency_tree)
-    with open(file, "w") as f:
+    with open(filepath, "w") as f:
         json.dump(dependency_tree, f, indent=2)
 
     return dependency_tree
-
-def get_data():
-    """Load the dependency tree data from a JSON file."""
-    with open(file, "r") as json_file:
-        data = json.load(json_file)
-        return data
 
 def def_elems(pkg_data, parent=None, vulnerable_packages=[]):
     """
@@ -163,15 +202,32 @@ def def_elems(pkg_data, parent=None, vulnerable_packages=[]):
     
     return elements
 
-# Vulnerable packages list (hardcoded for now, could be fetched dynamically)
-vulnerable_packages = ["werkzeug", "click"]
+def initialize_data():
+    """Initialize data and elements for the graph."""
+    global elements
+    try:
+        dep_data = get_data(package)
+        elements = def_elems(dep_data[0], vulnerable_packages=vulnerable_packages)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error initializing data: {e}")
+        # Set default elements if initialization fails
+        elements = [{'data': {'id': package, 'label': package}}]
 
-# Load dependency data and generate elements
-dep_data = get_data()
-elements = def_elems(dep_data[0], vulnerable_packages=vulnerable_packages)
+def initialize():
+    """Initialize the environment once."""
+    global initialized
+    if initialized:
+        return
+    
+    if not os.path.exists('/packages'):
+        download_and_extract_packages(set([package]), '/packages')
+    
+    initialize_data()
+    initialized = True
 
 # Dash app setup
 app = Dash(__name__)
+initialize()  # Call once at startup
 
 app.layout = html.Div([
     html.Div([
@@ -214,19 +270,9 @@ app.layout = html.Div([
     )
 ])
 
-if __name__ == "__main__":
-    install_package(package)
-    run_pipdeptree(package)
+def main():
+    initialize()
+    app.run_server(host='0.0.0.0', port=8080, debug=True)
 
-    packages_dir = '/packages'
-    download_dir = packages_dir
-
-    json_file = f'/graphs/{package}_dependency_tree.json'
-    package_names = parse_json_for_packages(json_file)
-
-    download_and_extract_packages(package_names, download_dir)
-
-    # Ensure the graphs directory exists
-    os.makedirs("graphs", exist_ok=True)
-    
-    app.run(debug=True, host='0.0.0.0', port=8080)
+if __name__ == '__main__':
+    main()

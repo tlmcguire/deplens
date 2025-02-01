@@ -1,5 +1,11 @@
-# docker build -t deplens .
-# docker run --rm -it -p 8080:8080 -v "$(pwd)/graphs:/graphs" deplens
+"""
+Interactive dependency graph visualization using Dash and Cytoscape.
+Analyzes Python package dependencies and displays them in an interactive web interface.
+
+Build: docker build -t deplens .
+Run: docker run --rm -it -p 8080:8080 -v "$(pwd)/graphs:/graphs" deplens
+
+"""
 
 from dash import Dash, html, dcc
 import dash_cytoscape as cyto

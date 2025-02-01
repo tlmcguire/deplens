@@ -71,35 +71,64 @@ def download_and_extract_packages(package_names, download_dir):
     """Download and extract source packages from PyPI."""
     os.makedirs(download_dir, exist_ok=True)
 
-    for package in package_names:
-        try:
-            print(f"Downloading {package} from PyPI...")
-            response = requests.get(f"https://pypi.org/pypi/{package}/json")
-            urls = response.json().get('urls', [])
+    # Load main package JSON using global file variable
+    try:
+        with open(file, "r") as f:
+            dependency_tree = json.load(f)
+    except FileNotFoundError:
+        print(f"JSON file not found: {file}")
+        return None
 
-            for url in urls:
-                if url['packagetype'] == 'sdist':
-                    tarball_url = url['url']
-                    tarball_response = requests.get(tarball_url)
-                    tarball_filename = os.path.basename(tarball_url)
-                    tarball_path = os.path.join(download_dir, tarball_filename)
+    def update_package_paths(packages):
+        for pkg in packages:
+            try:
+                print(f"Downloading {pkg['package_name']} from PyPI...")
+                response = requests.get(f"https://pypi.org/pypi/{pkg['package_name']}/json")
+                urls = response.json().get('urls', [])
 
-                    with open(tarball_path, 'wb') as file:
-                        file.write(tarball_response.content)
+                for url in urls:
+                    if url['packagetype'] == 'sdist':
+                        tarball_url = url['url']
+                        tarball_response = requests.get(tarball_url)
+                        tarball_filename = os.path.basename(tarball_url)
+                        tarball_path = os.path.join(download_dir, tarball_filename)
 
-                    print(f"Extracting {tarball_path}...")
-                    clean_package_directory(package)
-                    with tarfile.open(tarball_path, 'r:gz') as tar:
-                        tar.extractall(path=download_dir)
+                        # Add paths to package data
+                        pkg['source_paths'] = {
+                            'tarball_path': tarball_path,
+                            'package_dir': os.path.join(download_dir, pkg['package_name'])
+                        }
 
-                    # Rename the extracted directory
-                    extracted_dir = tarball_filename.replace('.tar.gz', '')
-                    src_dir = os.path.join(download_dir, extracted_dir)
-                    dst_dir = os.path.join(download_dir, package)
-                    if os.path.exists(src_dir):
-                        os.rename(src_dir, dst_dir)
-        except Exception as e:
-            print(f"Failed to download {package}: {e}")
+                        with open(tarball_path, 'wb') as f:
+                            f.write(tarball_response.content)
+
+                        print(f"Extracting {tarball_path}...")
+                        clean_package_directory(pkg['package_name'])
+                        with tarfile.open(tarball_path, 'r:gz') as tar:
+                            tar.extractall(path=download_dir)
+
+                        # Rename extracted directory
+                        extracted_dir = tarball_filename.replace('.tar.gz', '')
+                        src_dir = os.path.join(download_dir, extracted_dir)
+                        dst_dir = os.path.join(download_dir, pkg['package_name'])
+                        if os.path.exists(src_dir):
+                            os.rename(src_dir, dst_dir)
+                        
+                        break
+
+                # Process dependencies recursively
+                if pkg.get('dependencies'):
+                    update_package_paths(pkg['dependencies'])
+
+            except Exception as e:
+                print(f"Failed to download {pkg['package_name']}: {e}")
+
+    # Update paths and save
+    update_package_paths(dependency_tree)
+    with open(file, "w") as f:
+        json.dump(dependency_tree, f, indent=2)
+
+    return dependency_tree
 
 def get_data():
     """Load the dependency tree data from a JSON file."""

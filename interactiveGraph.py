@@ -20,11 +20,19 @@ import ast
 import importlib
 import shutil
 
+# Dictionary for web interface theme colors
+THEME = {
+    'text': '#E0E0E0',  # Light gray
+    'highlight': '#4FC3F7',  # Light blue
+    'secondary': '#B0BEC5',  # Blue gray
+    'background': '#333333'  # Dark gray
+}
+
 # Global variables
 initialized = False
 package = 'flask'
 elements = []  # Default empty list
-vulnerable_packages = ["werkzeug", "click"]
+vulnerable_packages = ["Werkzeug", "click"]
 
 def is_package_installed(package_name):
     """Check if package is already installed."""
@@ -231,50 +239,249 @@ def initialize():
     initialize_data()
     initialized = True
 
+def fetch_package_metadata(package_name):
+    """Fetch additional package metadata from PyPI."""
+    try:
+        response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                'name': data['info']['name'],
+                'version': data['info']['version'],
+                'description': data['info']['summary'],
+                'author': data['info']['author'],
+                'homepage': data['info']['home_page'],
+                'license': data['info']['license']
+            }
+    except Exception as e:
+        print(f"Error fetching metadata for {package_name}: {e}")
+        return None
+
+class FileNode:
+    def __init__(self, name, path, node_type='file'):
+        self.name = name
+        self.path = path
+        self.type = node_type
+        self.children = []
+        
+    def add_child(self, child):
+        self.children.append(child)
+
+def build_file_tree(package_data):
+    """Build file tree from package directory."""
+    package_dir = package_data.get('source_paths', {}).get('package_dir')
+    if not package_dir or not os.path.exists(package_dir):
+        return None
+        
+    root = FileNode(os.path.basename(package_dir), package_dir, 'directory')
+    
+    def scan_directory(directory, parent_node):
+        """Recursively scan directory and create FileNodes for each item."""
+        try:
+            for item in sorted(os.listdir(directory)):
+                full_path = os.path.join(directory, item)
+                if os.path.isfile(full_path):
+                    node = FileNode(item, full_path)
+                    parent_node.add_child(node)
+                else:
+                    node = FileNode(item, full_path, 'directory')
+                    parent_node.add_child(node)
+                    scan_directory(full_path, node)
+        except Exception as e:
+            print(f"Error scanning {directory}: {e}")
+            
+    scan_directory(package_dir, root)
+    return root
+
+def find_package_in_tree(package_name, dependency_tree):
+    """Recursively find package data in dependency tree."""
+    if dependency_tree['package_name'].lower() == package_name.lower():
+        return dependency_tree
+        
+    for dep in dependency_tree.get('dependencies', []):
+        result = find_package_in_tree(package_name, dep)
+        if result:
+            return result
+    return None
+
+def get_file_structure(package_name):
+    """Build and render file structure for package."""
+    try:
+        # Load main package JSON
+        with open(get_json_filepath(package)) as f:
+            dependency_tree = json.load(f)[0]
+        
+        # Find package data in dependency tree
+        package_data = find_package_in_tree(package_name, dependency_tree)
+        if not package_data:
+            return html.Div(f"Package {package_name} not found in dependency tree",
+                          style={'color': THEME['secondary']})
+        
+        package_dir = package_data.get('source_paths', {}).get('package_dir')
+        if not package_dir or not os.path.exists(package_dir):
+            return html.Div(f"No files found for {package_name}",
+                          style={'color': THEME['secondary']})
+        
+        def build_tree(path):
+            name = os.path.basename(path)
+            if os.path.isfile(path):
+                return FileNode(name, path)
+            
+            node = FileNode(name, path, 'directory')
+            try:
+                for item in sorted(os.listdir(path)):
+                    item_path = os.path.join(path, item)
+                    if not item.startswith('.'):  # Skip hidden files
+                        child = build_tree(item_path)
+                        if child:
+                            node.children.append(child)
+            except Exception as e:
+                print(f"Error scanning {path}: {e}")
+            return node
+        
+        def render_node(node):
+            icon = '📁 ' if node.type == 'directory' else '📄 '
+            if node.children:
+                return html.Details([
+                    html.Summary(
+                        icon + node.name,
+                        style={'color': THEME['highlight'], 'cursor': 'pointer'}
+                    ),
+                    html.Ul([
+                        render_node(child) for child in node.children
+                    ], style={'paddingLeft': '20px'})
+                ])
+            return html.Li(
+                icon + node.name,
+                style={'color': THEME['text'], 'listStyleType': 'none'}
+            )
+            
+        root = build_tree(package_dir)
+        return html.Div([
+            html.H3(f"Files for {package_name}",
+                   style={'color': THEME['highlight']}),
+            render_node(root)
+        ])
+        
+    except Exception as e:
+        return html.Div(f"Error loading files: {str(e)}",
+                       style={'color': THEME['secondary']})
+
 # Dash app setup
 app = Dash(__name__)
 initialize()  # Call once at startup
 
+# Update app layout - keep single-content-area ID
 app.layout = html.Div([
     html.Div([
         html.H1("DepLens", style={'text-align': 'left', 'color': 'white'}),
         html.Div(id='output-div', style={'padding': '2px', 'color': 'white'})
-    ], style={'background-color': '#222222', 'padding': '3px'}),
-    cyto.Cytoscape(
-        id='cytoscape',
-        layout={'name': 'breadthfirst'},
-        style={'width': '100%', 'height': '80vh', 'background-color': '#222222'},
-        elements=elements,
-        stylesheet=[
-            {'selector': 'node', 
-             'style': {
-                 'content': 'data(label)', 
-                 'color': 'white', 
-                 'text-wrap': 'wrap', 
-                 'text-valign': 'center', 
-                 'text-halign': 'center',
-                 'shape': 'round-rectangle',
-                 'width': '100px',
-                 'height': '50px',
-                 'background-color': '#333333',
-                 'border-width': '2px',
-                 'border-color': '#333333',
-                 'border-radius': '5%',
-                 'padding': '2px'
-             }},
-            {'selector': 'edge', 
-             'style': {
-                 'line-color': '#018786',
-                 'width': 2,
-                 'curve-style': 'bezier',
-                 'target-arrow-color': '#018786',
-                 'target-arrow-shape': 'triangle',
-                 'arrow-scale': 2,
-                 'target-arrow-fill': 'filled'
-             }}
-        ]
-    )
+    ], style={'background-color': '#222222', 'padding': '3px', 'width': '80%'}),
+    html.Div([
+        html.Div([
+            cyto.Cytoscape(
+                id='cytoscape',
+                layout={'name': 'breadthfirst'},
+                style={'width': '100%', 'height': '80vh', 'background-color': '#222222'},
+                elements=elements,
+                stylesheet=[
+                    {'selector': 'node', 
+                     'style': {
+                         'content': 'data(label)', 
+                         'color': 'white', 
+                         'text-wrap': 'wrap', 
+                         'text-valign': 'center', 
+                         'text-halign': 'center',
+                         'shape': 'round-rectangle',
+                         'width': '100px',
+                         'height': '50px',
+                         'background-color': '#333333',
+                         'border-width': '2px',
+                         'border-color': '#333333',
+                         'border-radius': '5%',
+                         'padding': '2px'
+                     }},
+                    {'selector': 'edge', 
+                     'style': {
+                         'line-color': '#018786',
+                         'width': 2,
+                         'curve-style': 'bezier',
+                         'target-arrow-color': '#018786',
+                         'target-arrow-shape': 'triangle',
+                         'arrow-scale': 2,
+                         'target-arrow-fill': 'filled'
+                     }}
+                ]
+            )
+        ], style={'width': '80%', 'display': 'inline-block', 'vertical-align': 'top'}),
+        html.Div([
+            html.H3("Package Details", style={'color': 'white'}),
+            html.Div(id='package-details', style={'color': 'white'}),
+            dcc.Tabs(
+                id='info-tabs',
+                value='details',
+                children=[
+                    dcc.Tab(
+                        label='Details',
+                        value='details',
+                        style={'color': THEME['text']},
+                        selected_style={'color': THEME['highlight']}
+                    ),
+                    dcc.Tab(
+                        label='Files',
+                        value='files',
+                        style={'color': THEME['text']},
+                        selected_style={'color': THEME['highlight']}
+                    )
+                ],
+                style={'background': THEME['background']}
+            ),
+            html.Div(
+                id='single-content-area',
+                style={'color': THEME['text'], 'padding': '15px'}
+            )
+        ], style={
+            'width': '22%',
+            'display': 'inline-block',
+            'vertical-align': 'top',
+            'background': THEME['background'],
+            'height': '92.3vh',
+            'overflow-y': 'auto',
+            'float': 'right',
+            'position': 'absolute',  # Add position absolute
+            'right': '0',           # Align to right edge
+            'top': '0'             # Align to top edge
+        })
+    ])
 ])
+
+@app.callback(
+    Output('single-content-area', 'children'),
+    [Input('info-tabs', 'value'),
+     Input('cytoscape', 'tapNodeData')]
+)
+def update_panel_content(tab, node_data):
+    if not node_data:
+        return html.Div("Select a package", style={'color': THEME['secondary']})
+    
+    package_name = node_data['id']
+    
+    if tab == 'details':
+        metadata = fetch_package_metadata(package_name)
+        if not metadata:
+            return html.Div(f"No metadata available for {package_name}")
+            
+        return html.Div([
+            html.H3(metadata['name'], style={'color': THEME['highlight']}),
+            html.P(f"Version: {metadata['version']}", style={'color': THEME['text']}),
+            html.P(f"Author: {metadata['author'] or 'Unknown'}", style={'color': THEME['text']}),
+            html.P(f"License: {metadata['license'] or 'Unknown'}", style={'color': THEME['text']}),
+            html.P("Description:", style={'color': THEME['highlight'], 'marginBottom': '5px'}),
+            html.P(metadata['description'], style={'color': THEME['text']})
+        ])
+    
+    elif tab == 'files':
+        return get_file_structure(package_name)
 
 def main():
     initialize()

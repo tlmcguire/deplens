@@ -1,68 +1,100 @@
 [
-    {
-        "key": "torch",
-        "package_name": "torch",
-        "installed_version": "2.6.0",
-        "required_version": "2.6.0",
+  {
+    "key": "torch",
+    "package_name": "torch",
+    "installed_version": "2.6.0",
+    "required_version": "2.6.0",
+    "dependencies": [
+      {
+        "key": "filelock",
+        "package_name": "filelock",
+        "installed_version": "3.17.0",
+        "required_version": "Any",
+        "dependencies": [],
+        "source_paths": {
+          "tarball_path": "/packages/filelock-3.17.0.tar.gz",
+          "package_dir": "/packages/filelock"
+        }
+      },
+      {
+        "key": "fsspec",
+        "package_name": "fsspec",
+        "installed_version": "2024.12.0",
+        "required_version": "Any",
+        "dependencies": [],
+        "source_paths": {
+          "tarball_path": "/packages/fsspec-2025.2.0.tar.gz",
+          "package_dir": "/packages/fsspec"
+        }
+      },
+      {
+        "key": "jinja2",
+        "package_name": "Jinja2",
+        "installed_version": "3.1.5",
+        "required_version": "Any",
         "dependencies": [
-            {
-                "key": "filelock",
-                "package_name": "filelock",
-                "installed_version": "3.17.0",
-                "required_version": "Any",
-                "dependencies": []
-            },
-            {
-                "key": "fsspec",
-                "package_name": "fsspec",
-                "installed_version": "2024.12.0",
-                "required_version": "Any",
-                "dependencies": []
-            },
-            {
-                "key": "jinja2",
-                "package_name": "Jinja2",
-                "installed_version": "3.1.5",
-                "required_version": "Any",
-                "dependencies": [
-                    {
-                        "key": "markupsafe",
-                        "package_name": "MarkupSafe",
-                        "installed_version": "3.0.2",
-                        "required_version": ">=2.0",
-                        "dependencies": []
-                    }
-                ]
-            },
-            {
-                "key": "networkx",
-                "package_name": "networkx",
-                "installed_version": "3.4.2",
-                "required_version": "Any",
-                "dependencies": []
-            },
-            {
-                "key": "sympy",
-                "package_name": "sympy",
-                "installed_version": "1.13.1",
-                "required_version": "==1.13.1",
-                "dependencies": [
-                    {
-                        "key": "mpmath",
-                        "package_name": "mpmath",
-                        "installed_version": "1.3.0",
-                        "required_version": ">=1.1.0,<1.4",
-                        "dependencies": []
-                    }
-                ]
-            },
-            {
-                "key": "typing-extensions",
-                "package_name": "typing_extensions",
-                "installed_version": "4.12.2",
-                "required_version": ">=4.10.0",
-                "dependencies": []
+          {
+            "key": "markupsafe",
+            "package_name": "MarkupSafe",
+            "installed_version": "3.0.2",
+            "required_version": ">=2.0",
+            "dependencies": [],
+            "source_paths": {
+              "tarball_path": "/packages/markupsafe-3.0.2.tar.gz",
+              "package_dir": "/packages/MarkupSafe"
             }
-        ]
-    }
+          }
+        ],
+        "source_paths": {
+          "tarball_path": "/packages/jinja2-3.1.5.tar.gz",
+          "package_dir": "/packages/Jinja2"
+        }
+      },
+      {
+        "key": "networkx",
+        "package_name": "networkx",
+        "installed_version": "3.4.2",
+        "required_version": "Any",
+        "dependencies": [],
+        "source_paths": {
+          "tarball_path": "/packages/networkx-3.4.2.tar.gz",
+          "package_dir": "/packages/networkx"
+        }
+      },
+      {
+        "key": "sympy",
+        "package_name": "sympy",
+        "installed_version": "1.13.1",
+        "required_version": "==1.13.1",
+        "dependencies": [
+          {
+            "key": "mpmath",
+            "package_name": "mpmath",
+            "installed_version": "1.3.0",
+            "required_version": ">=1.1.0,<1.4",
+            "dependencies": [],
+            "source_paths": {
+              "tarball_path": "/packages/mpmath-1.3.0.tar.gz",
+              "package_dir": "/packages/mpmath"
+            }
+          }
+        ],
+        "source_paths": {
+          "tarball_path": "/packages/sympy-1.13.3.tar.gz",
+          "package_dir": "/packages/sympy"
+        }
+      },
+      {
+        "key": "typing-extensions",
+        "package_name": "typing_extensions",
+        "installed_version": "4.12.2",
+        "required_version": ">=4.10.0",
+        "dependencies": [],
+        "source_paths": {
+          "tarball_path": "/packages/typing_extensions-4.12.2.tar.gz",
+          "package_dir": "/packages/typing_extensions"
+        }
+      }
+    ]
+  }
 ]

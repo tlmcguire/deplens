@@ -1,6 +1,11 @@
 # Image 
 FROM python:3.11-slim
 
+# Install system dependencies including graphviz
+RUN apt-get update && apt-get install -y \
+    graphviz \
+    && rm -rf /var/lib/apt/lists/*
+
 # Set the working directory in the container
 WORKDIR /app
 
@@ -15,4 +20,4 @@ RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
 EXPOSE 8080
 
 # Command to run your script
-CMD ["python", "interactiveGraph.py"]
+CMD ["python", "interactiveGraphDraft.py"]

@@ -20,4 +20,4 @@ RUN pip install --no-cache-dir --root-user-action=ignore -r requirements.txt
 EXPOSE 8080
 
 # Command to run your script
-CMD ["python", "interactiveGraphDraft.py"]
+CMD ["python", "interactiveGraph.py"]

@@ -3,13 +3,14 @@ Interactive dependency graph visualization using Dash and Cytoscape.
 Analyzes Python package dependencies and displays them in an interactive web interface.
 
 Build: docker build -t deplens .
-Run: docker run --rm -it -p 8080:8080 -v "$(pwd)/graphs:/graphs" deplens
+Run: docker run --rm -it -p 8081:8080 -v "$(pwd)/graphs:/graphs" deplens
 
 """
 
-from dash import Dash, html, dcc
+from dash import Dash, html, dcc, callback_context
 import dash_cytoscape as cyto
-from dash.dependencies import Input, Output
+import dash_bootstrap_components as dbc
+from dash.dependencies import Input, Output, State, ALL
 import json
 import os
 import subprocess
@@ -19,20 +20,26 @@ import tarfile
 import ast
 import importlib
 import shutil
+from typing import Dict, List, Any
+from dash import no_update
+
+cyto.load_extra_layouts()
 
 # Dictionary for web interface theme colors
 THEME = {
     'text': '#E0E0E0',  # Light gray
     'highlight': '#4FC3F7',  # Light blue
     'secondary': '#B0BEC5',  # Blue gray
-    'background': '#333333'  # Dark gray
+    'background': '#333333',  # Dark gray
+    'node': '#333333'
 }
 
 # Global variables
 initialized = False
 package = 'flask'
 elements = []  # Default empty list
-vulnerable_packages = ["Werkzeug", "click"]
+vulnerable_files = set()
+package_bandit_results = {}  # New global dict for storing bandit output per package
 
 def is_package_installed(package_name):
     """Check if package is already installed."""
@@ -127,6 +134,7 @@ def get_data(package_name):
 
 def download_and_extract_packages(package_names, download_dir):
     """Download and extract source packages from PyPI."""
+    print(f"Creating download directory: {download_dir}")  # Debug log
     os.makedirs(download_dir, exist_ok=True)
 
     # Load main package JSON
@@ -134,6 +142,7 @@ def download_and_extract_packages(package_names, download_dir):
     try:
         with open(filepath, "r") as f:
             dependency_tree = json.load(f)
+            print(f"Loaded dependency tree from: {filepath}")  # Debug log
     except FileNotFoundError:
         print(f"JSON file not found: {filepath}")
         return None
@@ -141,37 +150,52 @@ def download_and_extract_packages(package_names, download_dir):
     def update_package_paths(packages):
         for pkg in packages:
             try:
-                print(f"Downloading {pkg['package_name']} from PyPI...")
-                response = requests.get(f"https://pypi.org/pypi/{pkg['package_name']}/json")
+                package_name = pkg['package_name']
+                print(f"Processing package: {package_name}")  # Debug log
+                
+                response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
                 urls = response.json().get('urls', [])
+                
+                if not urls:
+                    print(f"No download URLs found for {package_name}")  # Debug log
+                    continue
 
                 for url in urls:
                     if url['packagetype'] == 'sdist':
                         tarball_url = url['url']
-                        tarball_response = requests.get(tarball_url)
                         tarball_filename = os.path.basename(tarball_url)
                         tarball_path = os.path.join(download_dir, tarball_filename)
+                        package_dir = os.path.join(download_dir, package_name)
+
+                        print(f"Downloading from: {tarball_url}")  # Debug log
+                        print(f"Saving to: {tarball_path}")  # Debug log
+                        print(f"Target directory: {package_dir}")  # Debug log
 
                         # Add paths to package data
                         pkg['source_paths'] = {
                             'tarball_path': tarball_path,
-                            'package_dir': os.path.join(download_dir, pkg['package_name'])
+                            'package_dir': package_dir
                         }
 
                         with open(tarball_path, 'wb') as f:
-                            f.write(tarball_response.content)
+                            response = requests.get(tarball_url)
+                            f.write(response.content)
 
-                        print(f"Extracting {tarball_path}...")
-                        clean_package_directory(pkg['package_name'])
+                        print(f"Cleaning directory: {package_dir}")  # Debug log
+                        clean_package_directory(package_name)
+                        
+                        print(f"Extracting {tarball_filename}")  # Debug log
                         with tarfile.open(tarball_path, 'r:gz') as tar:
                             tar.extractall(path=download_dir)
 
                         # Rename extracted directory
                         extracted_dir = tarball_filename.replace('.tar.gz', '')
                         src_dir = os.path.join(download_dir, extracted_dir)
-                        dst_dir = os.path.join(download_dir, pkg['package_name'])
                         if os.path.exists(src_dir):
-                            os.rename(src_dir, dst_dir)
+                            print(f"Renaming {src_dir} to {package_dir}")  # Debug log
+                            os.rename(src_dir, package_dir)
+                        else:
+                            print(f"Source directory not found: {src_dir}")  # Debug log
                         
                         break
 
@@ -180,10 +204,12 @@ def download_and_extract_packages(package_names, download_dir):
                     update_package_paths(pkg['dependencies'])
 
             except Exception as e:
-                print(f"Failed to download {pkg['package_name']}: {e}")
+                print(f"Error processing {package_name}: {str(e)}")  # Debug log
 
     # Update paths and save
     update_package_paths(dependency_tree)
+    
+    print(f"Saving updated dependency tree to: {filepath}")  # Debug log
     with open(filepath, "w") as f:
         json.dump(dependency_tree, f, indent=2)
 
@@ -221,7 +247,8 @@ def initialize_data():
     global elements
     try:
         dep_data = get_data(package)
-        elements = def_elems(dep_data[0], vulnerable_packages=vulnerable_packages)
+        # FIX: Use vulnerable_files (the global variable) instead of undefined vulnerable_packages
+        elements = def_elems(dep_data[0], vulnerable_packages=vulnerable_files)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Error initializing data: {e}")
         # Set default elements if initialization fails
@@ -240,18 +267,21 @@ def initialize():
     initialized = True
 
 def fetch_package_metadata(package_name):
-    """Fetch additional package metadata from PyPI."""
+    """Fetch additional package metadata from PyPI and include Bandit info if available."""
     try:
         response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
         if response.status_code == 200:
             data = response.json()
+            # Look up bandit results from our global dictionary
+            bandit_results = package_bandit_results.get(package_name, [])
             return {
                 'name': data['info']['name'],
                 'version': data['info']['version'],
                 'description': data['info']['summary'],
                 'author': data['info']['author'],
                 'homepage': data['info']['home_page'],
-                'license': data['info']['license']
+                'license': data['info']['license'],
+                'bandit_results': bandit_results 
             }
     except Exception as e:
         print(f"Error fetching metadata for {package_name}: {e}")
@@ -340,7 +370,9 @@ def get_file_structure(package_name):
             return node
         
         def render_node(node):
+            """Render file tree node with clickable Python files."""
             icon = '📁 ' if node.type == 'directory' else '📄 '
+            
             if node.children:
                 return html.Details([
                     html.Summary(
@@ -351,11 +383,29 @@ def get_file_structure(package_name):
                         render_node(child) for child in node.children
                     ], style={'paddingLeft': '20px'})
                 ])
+            
+            # Make Python files clickable and highlight if vulnerable
+            if node.name.endswith('.py'):
+                is_vulnerable = node.path in vulnerable_files
+                return html.Li(
+                    html.A(
+                        icon + node.name,
+                        id={'type': 'python-file', 'path': node.path},
+                        style={
+                            'color': '#ff4444' if is_vulnerable else THEME['text'],  # Red if vulnerable
+                            'textDecoration': 'none',
+                            'cursor': 'pointer',
+                            'fontWeight': 'bold' if is_vulnerable else 'normal'
+                        }
+                    ),
+                    style={'listStyleType': 'none'}
+                )
+            
             return html.Li(
                 icon + node.name,
                 style={'color': THEME['text'], 'listStyleType': 'none'}
             )
-            
+        
         root = build_tree(package_dir)
         return html.Div([
             html.H3(f"Files for {package_name}",
@@ -366,12 +416,175 @@ def get_file_structure(package_name):
     except Exception as e:
         return html.Div(f"Error loading files: {str(e)}",
                        style={'color': THEME['secondary']})
+    
+def transform_ast(node):
+    """Convert AST node to dictionary structure with all fields."""
+    if isinstance(node, ast.AST):
+        fields = {}
+        for field, value in ast.iter_fields(node):
+            fields[field] = transform_ast(value)
+        fields['node_type'] = node.__class__.__name__
+        return fields
+    elif isinstance(node, list):
+        return [transform_ast(x) for x in node]
+    return str(node)
+
+def ast_to_cytoscape_elements(node: ast.AST, parent_id: str = None) -> List[Dict[str, Any]]:
+    """Convert AST node to Cytoscape elements."""
+    elements = []
+    node_id = str(id(node))
+    
+    # Get node details
+    node_type = node.__class__.__name__
+    
+    # Extract relevant node information
+    details = {}
+    for field, value in ast.iter_fields(node):
+        if isinstance(value, (str, int, float)):
+            details[field] = str(value)
+        elif isinstance(value, list):
+            details[field] = f"List[{len(value)}]"
+    
+    # Create node with enhanced information
+    node_data = {
+        'id': node_id,
+        'label': node_type,
+        'type': node_type,
+        'details': details
+    }
+    
+    elements.append({
+        'data': node_data,
+        'classes': node_type.lower()
+    })
+    
+    # Create edge if there's a parent
+    if parent_id:
+        elements.append({
+            'data': {
+                'source': parent_id,
+                'target': node_id,
+                'type': 'ast-edge'
+            }
+        })
+    
+    # Process children
+    for child in ast.iter_child_nodes(node):
+        elements.extend(ast_to_cytoscape_elements(child, node_id))
+    
+    return elements
+
+def generate_ast_graph(file_path: str) -> List[Dict[str, Any]]:
+    """Generate Cytoscape elements from Python file AST."""
+    try:
+        print(f"Generating AST for: {file_path}")
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        print(f"File content length: {len(content)} bytes")
+        tree = ast.parse(content)
+        elements = ast_to_cytoscape_elements(tree)
+        
+        print(f"Generated {len(elements)} AST elements")
+        if not elements:
+            print(f"Warning: No AST elements generated for {file_path}")
+            return []
+            
+        return elements
+        
+    except Exception as e:
+        print(f"Error parsing {file_path}: {str(e)}")
+        return []
+
+def run_bandit_analysis(package_dir: str, severity: str = 'LOW', profile: str = None) -> List[Dict]:
+    """Run Bandit security analysis on a package directory."""
+    try:
+        cmd = ['bandit', '-r', '-f', 'json']
+        
+        if severity == 'HIGH':
+            cmd.append('-lll')
+        elif severity == 'MEDIUM':
+            cmd.append('-ll')
+        
+        if profile:
+            cmd.extend(['-p', profile])
+            
+        cmd.append(package_dir)
+        
+        print(f"Running Bandit command: {' '.join(cmd)}")  # Debug command
+        
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False
+        )
+        
+        # Debug output
+        print(f"Bandit return code: {result.returncode}")
+        print(f"Bandit stderr: {result.stderr}")
+        
+        if result.returncode in [0, 1]:
+            try:
+                if not result.stdout.strip():
+                    print("Empty Bandit output")
+                    return []
+                    
+                data = json.loads(result.stdout)
+                # Store vulnerable file paths globally
+                global vulnerable_files
+                vulnerable_files.update(issue['filename'] for issue in data.get('results', []))
+                return data.get('results', [])
+            except json.JSONDecodeError as e:
+                print(f"Invalid JSON from Bandit: {e}")
+                print(f"Raw output: {result.stdout[:200]}...") 
+                return []
+        else:
+            print(f"Bandit analysis failed with code {result.returncode}: {result.stderr}")
+            return []
+            
+    except Exception as e:
+        print(f"Error running Bandit: {str(e)}")
+        print(f"Package directory: {package_dir}")
+        return []
+
+def analyze_package_security(package_name: str, dependency_tree: Dict) -> Dict[str, str]:
+    """
+    Analyze security of a package and its dependencies.
+    
+    Args:
+        package_name: Name of the root package
+        dependency_tree: Package dependency tree
+        
+    Returns:
+        Dict mapping package names to security status ('secure'/'vulnerable')
+    """
+    security_status = {}
+    
+    def analyze_tree(pkg_data):
+        pkg_name = pkg_data['package_name']
+        pkg_dir = pkg_data.get('source_paths', {}).get('package_dir')
+        
+        if pkg_dir and os.path.exists(pkg_dir):
+            issues = run_bandit_analysis(pkg_dir)
+            security_status[pkg_name] = 'vulnerable' if issues else 'secure'
+            package_bandit_results[pkg_name] = issues
+            
+            # Recursively analyze dependencies
+            for dep in pkg_data.get('dependencies', []):
+                analyze_tree(dep)
+    
+    analyze_tree(dependency_tree)
+    return security_status
 
 # Dash app setup
-app = Dash(__name__)
+app = Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.DARKLY]  # Dark theme
+)
 initialize()  # Call once at startup
 
-# Update app layout - keep single-content-area ID
 app.layout = html.Div([
     html.Div([
         html.H1("DepLens", style={'text-align': 'left', 'color': 'white'}),
@@ -381,7 +594,7 @@ app.layout = html.Div([
         html.Div([
             cyto.Cytoscape(
                 id='cytoscape',
-                layout={'name': 'breadthfirst'},
+                layout={'name': 'dagre'}, 
                 style={'width': '100%', 'height': '80vh', 'background-color': '#222222'},
                 elements=elements,
                 stylesheet=[
@@ -448,13 +661,95 @@ app.layout = html.Div([
             'height': '92.3vh',
             'overflow-y': 'auto',
             'float': 'right',
-            'position': 'absolute',  # Add position absolute
+            'position': 'absolute', 
             'right': '0',           # Align to right edge
             'top': '0'             # Align to top edge
         })
-    ])
+    ]),
+    # Modal for AST visualization
+    html.Div([
+        dbc.Modal(
+            id='ast-modal',
+            is_open=False,
+            style={
+                'backgroundColor': THEME['background'],
+                'color': THEME['text']
+            },
+            children=[
+                dbc.ModalHeader(
+                    html.H3("AST Visualization", style={'color': THEME['highlight']}),
+                    close_button=True,  
+                    style={'border': 'none'}  
+                ),
+                dbc.ModalBody([
+                    cyto.Cytoscape(
+                        id='ast-graph',
+                        layout={
+                            'name': 'dagre',
+                            'rankDir': 'TB',
+                            'ranker': 'network-simplex', 
+                            'align': 'UL',  # Upper-left alignment
+                            'rankSep': 40,  
+                            'nodeSep': 20,  
+                            'edgeSep': 20, 
+                            'acyclicer': 'greedy',
+                            'spacingFactor': 0.9  
+                        },
+                        style={'width': '100%', 'height': '80vh'},
+                        stylesheet=[
+                            {
+                                'selector': 'node',
+                                'style': {
+                                    'content': 'data(label)',
+                                    'color': 'white',
+                                    'text-wrap': 'wrap',
+                                    'text-valign': 'center',
+                                    'text-halign': 'center',
+                                    'shape': 'round-rectangle',  
+                                    'width': '100px',  
+                                    'height': '50px',  
+                                    'background-color': '#018786',  
+                                    'border-width': '2px',
+                                    'border-color': '#333333',
+                                    'border-radius': '5%',
+                                    'padding': '2px'
+                                }
+                            },
+                            {
+                                'selector': 'edge',
+                                'style': {
+                                    'line-color': '#018786',  
+                                    'width': 2,
+                                    'curve-style': 'bezier',  
+                                    'target-arrow-color': '#018786',
+                                    'target-arrow-shape': 'triangle',
+                                    'arrow-scale': 2,
+                                    'target-arrow-fill': 'filled'
+                                }
+                            }
+                        ]
+                    )
+                ])
+            ],
+            size='xl'  # Extra large modal size
+        )
+    ]),
+    # Button for security analysis
+    html.Button(
+        "Run Bandit Security Analysis",
+        id='analyze-security-btn',
+        style={
+            'background-color': '#028786',
+            'color': THEME['text'],
+            'border': 'none',
+            'padding': '10px 20px',
+            'cursor': 'pointer',
+            'margin': '10px'
+        }
+    )
 ])
 
+# Callback to update package details
 @app.callback(
     Output('single-content-area', 'children'),
     [Input('info-tabs', 'value'),
@@ -470,18 +765,178 @@ def update_panel_content(tab, node_data):
         metadata = fetch_package_metadata(package_name)
         if not metadata:
             return html.Div(f"No metadata available for {package_name}")
-            
+        
+        # Instead of re-running Bandit here, use the stored results from the metadata
+        bandit_results = metadata.get("bandit_results", [])
+        if bandit_results:
+            bandit_display = html.Div([
+                html.H4("Bandit Vulnerabilities", style={'color': '#ff4444'}),
+                html.Ul(
+                    [html.Li(f"{issue.get('test_id')}: {issue.get('issue_text')}") 
+                     for issue in bandit_results]
+                )
+            ])
+        else:
+            bandit_display = html.Div(
+                "No vulnerabilities detected.",
+                style={'color': THEME['text'], 'marginTop': '10px'}
+            )
+        
         return html.Div([
             html.H3(metadata['name'], style={'color': THEME['highlight']}),
             html.P(f"Version: {metadata['version']}", style={'color': THEME['text']}),
             html.P(f"Author: {metadata['author'] or 'Unknown'}", style={'color': THEME['text']}),
             html.P(f"License: {metadata['license'] or 'Unknown'}", style={'color': THEME['text']}),
             html.P("Description:", style={'color': THEME['highlight'], 'marginBottom': '5px'}),
-            html.P(metadata['description'], style={'color': THEME['text']})
+            html.P(metadata['description'], style={'color': THEME['text']}),
+            bandit_display
         ])
     
     elif tab == 'files':
         return get_file_structure(package_name)
+
+# Callback to update package details
+@app.callback(
+    Output('ast-modal', 'is_open'),
+    Output('ast-graph', 'elements'),
+    [Input({'type': 'python-file', 'path': ALL}, 'n_clicks')],
+    [State('ast-modal', 'is_open')]
+)
+def toggle_ast_modal(file_clicks, is_open):
+    """Toggle AST visualization modal and update graph elements."""
+    ctx = callback_context
+    if not ctx.triggered:
+        return False, []
+    
+    # Get the triggered prop_id, expected as a string like:
+    # '{"type":"python-file","path":"/path/to/file.py"}.n_clicks'
+    triggered_prop = ctx.triggered[0]['prop_id']
+    if '.n_clicks' not in triggered_prop:
+        return False, []
+        
+    # Extract only the component id part
+    component_id_str = triggered_prop.split('.n_clicks')[0]
+    
+    # Try parsing as JSON; if that fails, fall back to ast.literal_eval
+    try:
+        id_dict = json.loads(component_id_str)
+    except json.JSONDecodeError:
+        try:
+            import ast
+            id_dict = ast.literal_eval(component_id_str)
+        except Exception as e:
+            print(f"Failed to parse component ID: {e}")
+            return False, []
+    
+    file_path = id_dict.get('path')
+    if not file_path:
+        print("No file path found in component ID")
+        return False, []
+    
+    # Ensure at least one click exists
+    if not any(file_clicks):
+        return False, []
+    
+    print(f"Generating AST for file: {file_path}")
+    elements = generate_ast_graph(file_path)
+    
+    if elements:
+        print(f"Generated {len(elements)} AST elements")
+        return True, elements
+    else:
+        print("No AST elements generated")
+        return False, []
+
+# Bandit analysis callback
+@app.callback(
+    Output('cytoscape', 'stylesheet'),
+    Output('cytoscape', 'elements'),
+    Output('output-div', 'children'),
+    Output('analyze-security-btn', 'children'),
+    Input('analyze-security-btn', 'n_clicks'),
+    State('cytoscape', 'elements'),
+    prevent_initial_call=True
+)
+def run_security_analysis(n_clicks, current_elements):
+    if not n_clicks:
+        return no_update, no_update, no_update, "Run Bandit Security Analysis"
+     
+    try:
+        # Load dependency tree
+        with open(get_json_filepath(package)) as f:
+            dependency_tree = json.load(f)[0]
+            
+        # Run security analysis
+        security_status = analyze_package_security(package, dependency_tree)
+        
+        # Base stylesheet with default styles
+        stylesheet = [
+            {
+                'selector': 'node',
+                'style': {
+                    'content': 'data(label)',
+                    'color': 'white',
+                    'text-wrap': 'wrap', 
+                    'text-valign': 'center', 
+                    'text-halign': 'center',
+                    'shape': 'round-rectangle',
+                    'width': '100px',
+                    'height': '50px',
+                    'background-color': '#333333',  # Default color
+                    'border-width': '2px',
+                    'border-color': '#333333',
+                    'border-radius': '5%',
+                    'padding': '2px'
+                }
+            },
+            {
+                'selector': 'node[security = "vulnerable"]',
+                'style': {
+                    'background-color': '#ff4444',
+                    'border-color': '#cc0000'
+                }
+            },
+            {
+                'selector': 'node[security = "secure"]',
+                'style': {
+                    'background-color': '#00C851',
+                    'border-color': '#007E33'
+                }
+            },
+            {
+                'selector': 'edge',
+                'style': {
+                    'line-color': '#018786',
+                    'width': 2,
+                    'curve-style': 'bezier',
+                    'target-arrow-color': '#018786',
+                    'target-arrow-shape': 'triangle',
+                    'arrow-scale': 2,
+                    'target-arrow-fill': 'filled'
+                }
+            }
+        ]
+        
+        # Update elements while preserving structure
+        updated_elements = []
+        for elem in current_elements:
+            new_elem = elem.copy()  # Create a copy of the element
+            # Only update node security status
+            if 'source' not in elem['data']:  # This is a node
+                pkg_name = elem['data']['id']
+                if pkg_name in security_status:
+                    new_elem['data']['security'] = security_status[pkg_name]
+            updated_elements.append(new_elem)
+        
+        vulnerable_count = list(security_status.values()).count('vulnerable')
+        output_message = f"Security analysis complete. Found {vulnerable_count} insecure packages."
+        
+        # Return final results and update button text back to its original label.
+        return stylesheet, updated_elements, output_message, "Run Bandit Security Analysis"
+        
+    except Exception as e:
+        print(f"Security analysis error: {str(e)}")
+        return no_update, no_update, f"Error during security analysis: {str(e)}", "Run Bandit Security Analysis"
 
 def main():
     initialize()

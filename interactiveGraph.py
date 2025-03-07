@@ -39,7 +39,7 @@ initialized = False
 package = 'flask'
 elements = []  # Default empty list
 vulnerable_files = set()
-package_bandit_results = {}  # New global dict for storing bandit output per package
+package_bandit_results = {} 
 
 def is_package_installed(package_name):
     """Check if package is already installed."""
@@ -134,7 +134,7 @@ def get_data(package_name):
 
 def download_and_extract_packages(package_names, download_dir):
     """Download and extract source packages from PyPI."""
-    print(f"Creating download directory: {download_dir}")  # Debug log
+    print(f"Creating download directory: {download_dir}")  
     os.makedirs(download_dir, exist_ok=True)
 
     # Load main package JSON
@@ -142,7 +142,7 @@ def download_and_extract_packages(package_names, download_dir):
     try:
         with open(filepath, "r") as f:
             dependency_tree = json.load(f)
-            print(f"Loaded dependency tree from: {filepath}")  # Debug log
+            print(f"Loaded dependency tree from: {filepath}")  
     except FileNotFoundError:
         print(f"JSON file not found: {filepath}")
         return None
@@ -151,25 +151,21 @@ def download_and_extract_packages(package_names, download_dir):
         for pkg in packages:
             try:
                 package_name = pkg['package_name']
-                print(f"Processing package: {package_name}")  # Debug log
+                print(f"Processing package: {package_name}")  
                 
                 response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
                 urls = response.json().get('urls', [])
                 
                 if not urls:
-                    print(f"No download URLs found for {package_name}")  # Debug log
+                    print(f"No download URLs found for {package_name}")  
                     continue
 
                 for url in urls:
-                    if url['packagetype'] == 'sdist':
+                    if (url['packagetype'] == 'sdist'):
                         tarball_url = url['url']
                         tarball_filename = os.path.basename(tarball_url)
                         tarball_path = os.path.join(download_dir, tarball_filename)
                         package_dir = os.path.join(download_dir, package_name)
-
-                        print(f"Downloading from: {tarball_url}")  # Debug log
-                        print(f"Saving to: {tarball_path}")  # Debug log
-                        print(f"Target directory: {package_dir}")  # Debug log
 
                         # Add paths to package data
                         pkg['source_paths'] = {
@@ -181,10 +177,10 @@ def download_and_extract_packages(package_names, download_dir):
                             response = requests.get(tarball_url)
                             f.write(response.content)
 
-                        print(f"Cleaning directory: {package_dir}")  # Debug log
+                        print(f"Cleaning directory: {package_dir}")  
                         clean_package_directory(package_name)
                         
-                        print(f"Extracting {tarball_filename}")  # Debug log
+                        print(f"Extracting {tarball_filename}")  
                         with tarfile.open(tarball_path, 'r:gz') as tar:
                             tar.extractall(path=download_dir)
 
@@ -192,10 +188,10 @@ def download_and_extract_packages(package_names, download_dir):
                         extracted_dir = tarball_filename.replace('.tar.gz', '')
                         src_dir = os.path.join(download_dir, extracted_dir)
                         if os.path.exists(src_dir):
-                            print(f"Renaming {src_dir} to {package_dir}")  # Debug log
+                            print(f"Renaming {src_dir} to {package_dir}")  
                             os.rename(src_dir, package_dir)
                         else:
-                            print(f"Source directory not found: {src_dir}")  # Debug log
+                            print(f"Source directory not found: {src_dir}")  
                         
                         break
 
@@ -204,12 +200,12 @@ def download_and_extract_packages(package_names, download_dir):
                     update_package_paths(pkg['dependencies'])
 
             except Exception as e:
-                print(f"Error processing {package_name}: {str(e)}")  # Debug log
+                print(f"Error processing {package_name}: {str(e)}") 
 
     # Update paths and save
     update_package_paths(dependency_tree)
     
-    print(f"Saving updated dependency tree to: {filepath}")  # Debug log
+    print(f"Saving updated dependency tree to: {filepath}")  
     with open(filepath, "w") as f:
         json.dump(dependency_tree, f, indent=2)
 
@@ -267,13 +263,12 @@ def initialize():
     initialized = True
 
 def fetch_package_metadata(package_name):
-    """Fetch additional package metadata from PyPI and include Bandit info if available."""
     try:
+        package_key = package_name.lower()
         response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
         if response.status_code == 200:
             data = response.json()
-            # Look up bandit results from our global dictionary
-            bandit_results = package_bandit_results.get(package_name, [])
+            bandit_results = package_bandit_results.get(package_key, [])
             return {
                 'name': data['info']['name'],
                 'version': data['info']['version'],
@@ -281,7 +276,7 @@ def fetch_package_metadata(package_name):
                 'author': data['info']['author'],
                 'homepage': data['info']['home_page'],
                 'license': data['info']['license'],
-                'bandit_results': bandit_results 
+                'bandit_results': bandit_results
             }
     except Exception as e:
         print(f"Error fetching metadata for {package_name}: {e}")
@@ -511,7 +506,7 @@ def run_bandit_analysis(package_dir: str, severity: str = 'LOW', profile: str = 
             
         cmd.append(package_dir)
         
-        print(f"Running Bandit command: {' '.join(cmd)}")  # Debug command
+        print(f"Running Bandit command: {' '.join(cmd)}")  
         
         result = subprocess.run(
             cmd,
@@ -553,27 +548,30 @@ def analyze_package_security(package_name: str, dependency_tree: Dict) -> Dict[s
     """
     Analyze security of a package and its dependencies.
     
-    Args:
-        package_name: Name of the root package
-        dependency_tree: Package dependency tree
-        
     Returns:
         Dict mapping package names to security status ('secure'/'vulnerable')
     """
     security_status = {}
     
     def analyze_tree(pkg_data):
-        pkg_name = pkg_data['package_name']
+        pkg_name = pkg_data.get('package_name', package_name).lower()
         pkg_dir = pkg_data.get('source_paths', {}).get('package_dir')
+        
+        # Fallback: if no source_paths and the package is installed, use its installation directory.
+        if not pkg_dir and is_package_installed(pkg_name):
+            import importlib.util
+            spec = importlib.util.find_spec(pkg_name)
+            if spec and spec.origin:
+                pkg_dir = os.path.dirname(spec.origin)
         
         if pkg_dir and os.path.exists(pkg_dir):
             issues = run_bandit_analysis(pkg_dir)
             security_status[pkg_name] = 'vulnerable' if issues else 'secure'
             package_bandit_results[pkg_name] = issues
-            
-            # Recursively analyze dependencies
-            for dep in pkg_data.get('dependencies', []):
-                analyze_tree(dep)
+        
+        # Recursively analyze dependencies
+        for dep in pkg_data.get('dependencies', []):
+            analyze_tree(dep)
     
     analyze_tree(dependency_tree)
     return security_status
@@ -768,7 +766,7 @@ def update_panel_content(tab, node_data):
         
         # Instead of re-running Bandit here, use the stored results from the metadata
         bandit_results = metadata.get("bandit_results", [])
-        if bandit_results:
+        if (bandit_results):
             bandit_display = html.Div([
                 html.H4("Bandit Vulnerabilities", style={'color': '#ff4444'}),
                 html.Ul(
@@ -882,7 +880,7 @@ def run_security_analysis(n_clicks, current_elements):
                     'shape': 'round-rectangle',
                     'width': '100px',
                     'height': '50px',
-                    'background-color': '#333333',  # Default color
+                    'background-color': '#333333', 
                     'border-width': '2px',
                     'border-color': '#333333',
                     'border-radius': '5%',
@@ -920,9 +918,9 @@ def run_security_analysis(n_clicks, current_elements):
         # Update elements while preserving structure
         updated_elements = []
         for elem in current_elements:
-            new_elem = elem.copy()  # Create a copy of the element
+            new_elem = elem.copy() 
             # Only update node security status
-            if 'source' not in elem['data']:  # This is a node
+            if 'source' not in elem['data']:  
                 pkg_name = elem['data']['id']
                 if pkg_name in security_status:
                     new_elem['data']['security'] = security_status[pkg_name]

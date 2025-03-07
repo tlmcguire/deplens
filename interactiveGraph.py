@@ -764,7 +764,7 @@ def update_panel_content(tab, node_data):
         if not metadata:
             return html.Div(f"No metadata available for {package_name}")
         
-        # Instead of re-running Bandit here, use the stored results from the metadata
+        # Instead of re-running Bandit, use stored results from metadata
         bandit_results = metadata.get("bandit_results", [])
         if (bandit_results):
             bandit_display = html.Div([
@@ -787,7 +787,8 @@ def update_panel_content(tab, node_data):
             html.P(f"License: {metadata['license'] or 'Unknown'}", style={'color': THEME['text']}),
             html.P("Description:", style={'color': THEME['highlight'], 'marginBottom': '5px'}),
             html.P(metadata['description'], style={'color': THEME['text']}),
-            bandit_display
+            html.P("Bandit Analysis:", style={'color': THEME['highlight'], 'marginBottom': '5px'}),
+            bandit_display, 
         ])
     
     elif tab == 'files':

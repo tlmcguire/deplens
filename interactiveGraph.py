@@ -3,7 +3,7 @@ Interactive dependency graph visualization using Dash and Cytoscape.
 Analyzes Python package dependencies and displays them in an interactive web interface.
 
 Build: docker build -t deplens .
-Run: docker run --rm -it -p 8081:8080 -v "$(pwd)/graphs:/graphs" deplens
+Run: docker run --rm -it -p 8080:8080 -v "$(pwd)/graphs:/graphs" deplens
 
 """
 
@@ -22,6 +22,15 @@ import importlib
 import shutil
 from typing import Dict, List, Any
 from dash import no_update
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 cyto.load_extra_layouts()
 
@@ -31,7 +40,7 @@ THEME = {
     'highlight': '#4FC3F7',  # Light blue
     'secondary': '#B0BEC5',  # Blue gray
     'background': '#333333',  # Dark gray
-    'node': '#333333'
+    'node': '#018786'  # Teal color for nodes
 }
 
 # Global variables
@@ -211,22 +220,30 @@ def download_and_extract_packages(package_names, download_dir):
 
     return dependency_tree
 
-def def_elems(pkg_data, parent=None, vulnerable_packages=[]):
+def def_elems(pkg_data, parent=None, vulnerable_packages=None):
     """
     Recursively map package data into Cytoscape elements.
 
     :param pkg_data: The package data dictionary.
     :param parent: The parent node ID, if any.
-    :param vulnerable_packages: List of package names marked as vulnerable.
+    :param vulnerable_packages: Set of package names marked as vulnerable.
     :return: List of Cytoscape elements.
     """
+    if vulnerable_packages is None:
+        vulnerable_packages = set()
+        
     elements = []
     node_id = pkg_data["package_name"]
     label = f"{node_id}\nv{pkg_data['installed_version']}"
-    color = "#FF0000" if node_id in vulnerable_packages else "#018786"  # Red for vulnerable, default for safe
     
-    # Add the current node
-    elements.append({'data': {'id': node_id, 'label': label}, 'style': {'background-color': color}})
+    # Add the current node with security status in data
+    elements.append({
+        'data': {
+            'id': node_id, 
+            'label': label,
+            'security': 'vulnerable' if node_id in vulnerable_packages else 'secure'
+        }
+    })
     
     # Add an edge if there's a parent
     if parent:
@@ -243,12 +260,11 @@ def initialize_data():
     global elements
     try:
         dep_data = get_data(package)
-        # FIX: Use vulnerable_files (the global variable) instead of undefined vulnerable_packages
         elements = def_elems(dep_data[0], vulnerable_packages=vulnerable_files)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Error initializing data: {e}")
         # Set default elements if initialization fails
-        elements = [{'data': {'id': package, 'label': package}}]
+        elements = [{'data': {'id': package, 'label': package, 'security': 'secure'}}]
 
 def initialize():
     """Initialize the environment once."""
@@ -269,6 +285,8 @@ def fetch_package_metadata(package_name):
         if response.status_code == 200:
             data = response.json()
             bandit_results = package_bandit_results.get(package_key, [])
+            logging.debug(f"Fetched metadata for {package_name} (key: {package_key}): "
+                          f"{len(bandit_results)} Bandit issues found")
             return {
                 'name': data['info']['name'],
                 'version': data['info']['version'],
@@ -491,22 +509,17 @@ def generate_ast_graph(file_path: str) -> List[Dict[str, Any]]:
         print(f"Error parsing {file_path}: {str(e)}")
         return []
 
-def run_bandit_analysis(package_dir: str, severity: str = 'LOW', profile: str = None) -> List[Dict]:
+def run_bandit_analysis(package_dir: str, severity: str = 'HIGH', profile: str = None) -> List[Dict]:
     """Run Bandit security analysis on a package directory."""
     try:
-        cmd = ['bandit', '-r', '-f', 'json']
+        cmd = ['bandit', '-r', '-q', '-f', 'json']
         
-        if severity == 'HIGH':
-            cmd.append('-lll')
-        elif severity == 'MEDIUM':
-            cmd.append('-ll')
-        
-        if profile:
-            cmd.extend(['-p', profile])
+        # Only show high severity issues
+        cmd.extend(['-lll'])  # Set minimum severity to high
             
         cmd.append(package_dir)
         
-        print(f"Running Bandit command: {' '.join(cmd)}")  
+        logging.debug(f"Running Bandit command: {' '.join(cmd)}")
         
         result = subprocess.run(
             cmd,
@@ -516,7 +529,6 @@ def run_bandit_analysis(package_dir: str, severity: str = 'LOW', profile: str = 
             check=False
         )
         
-        # Debug output
         print(f"Bandit return code: {result.returncode}")
         print(f"Bandit stderr: {result.stderr}")
         
@@ -527,13 +539,12 @@ def run_bandit_analysis(package_dir: str, severity: str = 'LOW', profile: str = 
                     return []
                     
                 data = json.loads(result.stdout)
-                # Store vulnerable file paths globally
                 global vulnerable_files
                 vulnerable_files.update(issue['filename'] for issue in data.get('results', []))
                 return data.get('results', [])
             except json.JSONDecodeError as e:
                 print(f"Invalid JSON from Bandit: {e}")
-                print(f"Raw output: {result.stdout[:200]}...") 
+                print(f"Raw output: {result.stdout[:200]}...")
                 return []
         else:
             print(f"Bandit analysis failed with code {result.returncode}: {result.stderr}")
@@ -557,17 +568,12 @@ def analyze_package_security(package_name: str, dependency_tree: Dict) -> Dict[s
         pkg_name = pkg_data.get('package_name', package_name).lower()
         pkg_dir = pkg_data.get('source_paths', {}).get('package_dir')
         
-        # Fallback: if no source_paths and the package is installed, use its installation directory.
-        if not pkg_dir and is_package_installed(pkg_name):
-            import importlib.util
-            spec = importlib.util.find_spec(pkg_name)
-            if spec and spec.origin:
-                pkg_dir = os.path.dirname(spec.origin)
-        
         if pkg_dir and os.path.exists(pkg_dir):
             issues = run_bandit_analysis(pkg_dir)
-            security_status[pkg_name] = 'vulnerable' if issues else 'secure'
-            package_bandit_results[pkg_name] = issues
+            # Only mark as vulnerable if there are high severity issues
+            high_severity_issues = [i for i in issues if i.get('issue_severity', '').lower() == 'high']
+            security_status[pkg_name] = 'vulnerable' if high_severity_issues else 'secure'
+            package_bandit_results[pkg_name] = high_severity_issues
         
         # Recursively analyze dependencies
         for dep in pkg_data.get('dependencies', []):
@@ -606,9 +612,9 @@ app.layout = html.Div([
                          'shape': 'round-rectangle',
                          'width': '100px',
                          'height': '50px',
-                         'background-color': '#333333',
+                         'background-color': '#018786',  # Teal color
                          'border-width': '2px',
-                         'border-color': '#333333',
+                         'border-color': '#018786',  # Match border to node color initially
                          'border-radius': '5%',
                          'padding': '2px'
                      }},
@@ -757,20 +763,20 @@ def update_panel_content(tab, node_data):
     if not node_data:
         return html.Div("Select a package", style={'color': THEME['secondary']})
     
-    package_name = node_data['id']
+    package_name = node_data['id'].lower()
+    logging.debug(f"Update panel for package: {package_name}")
     
     if tab == 'details':
         metadata = fetch_package_metadata(package_name)
         if not metadata:
             return html.Div(f"No metadata available for {package_name}")
         
-        # Instead of re-running Bandit, use stored results from metadata
         bandit_results = metadata.get("bandit_results", [])
-        if (bandit_results):
+        logging.debug(f"Package {package_name} has {len(bandit_results)} bandit issues")
+        if bandit_results:
             bandit_display = html.Div([
-                html.H4("Bandit Vulnerabilities", style={'color': '#ff4444'}),
                 html.Ul(
-                    [html.Li(f"{issue.get('test_id')}: {issue.get('issue_text')}") 
+                    [html.Li(f"{issue.get('test_id')}: {issue.get('issue_text')}")
                      for issue in bandit_results]
                 )
             ])
@@ -875,15 +881,15 @@ def run_security_analysis(n_clicks, current_elements):
                 'style': {
                     'content': 'data(label)',
                     'color': 'white',
-                    'text-wrap': 'wrap', 
-                    'text-valign': 'center', 
+                    'text-wrap': 'wrap',
+                    'text-valign': 'center',
                     'text-halign': 'center',
                     'shape': 'round-rectangle',
                     'width': '100px',
                     'height': '50px',
-                    'background-color': '#333333', 
+                    'background-color': '#018786',  # Keep teal for all nodes
                     'border-width': '2px',
-                    'border-color': '#333333',
+                    'border-color': '#018786',  # Match border to node color by default
                     'border-radius': '5%',
                     'padding': '2px'
                 }
@@ -891,15 +897,13 @@ def run_security_analysis(n_clicks, current_elements):
             {
                 'selector': 'node[security = "vulnerable"]',
                 'style': {
-                    'background-color': '#ff4444',
-                    'border-color': '#cc0000'
+                    'border-color': '#ff4444'  # Red border for vulnerable
                 }
             },
             {
                 'selector': 'node[security = "secure"]',
                 'style': {
-                    'background-color': '#00C851',
-                    'border-color': '#007E33'
+                    'border-color': '#00C851'  # Green border for secure
                 }
             },
             {
@@ -919,10 +923,10 @@ def run_security_analysis(n_clicks, current_elements):
         # Update elements while preserving structure
         updated_elements = []
         for elem in current_elements:
-            new_elem = elem.copy() 
-            # Only update node security status
-            if 'source' not in elem['data']:  
-                pkg_name = elem['data']['id']
+            new_elem = elem.copy()
+            # Only update node security status for nodes (skip edges)
+            if 'source' not in elem['data']:
+                pkg_name = elem['data']['id'].lower()
                 if pkg_name in security_status:
                     new_elem['data']['security'] = security_status[pkg_name]
             updated_elements.append(new_elem)
@@ -939,7 +943,7 @@ def run_security_analysis(n_clicks, current_elements):
 
 def main():
     initialize()
-    app.run_server(host='0.0.0.0', port=8080, debug=True)
+    app.run(host='0.0.0.0', port=8080, debug=True)  # Changed from app.run_server to app.run
 
 if __name__ == '__main__':
     main()

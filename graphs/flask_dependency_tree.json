@@ -57,7 +57,7 @@
           }
         ],
         "source_paths": {
-          "tarball_path": "/packages/jinja2-3.1.5.tar.gz",
+          "tarball_path": "/packages/jinja2-3.1.6.tar.gz",
           "package_dir": "/packages/Jinja2"
         }
       },

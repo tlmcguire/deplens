@@ -3,7 +3,7 @@ Interactive dependency graph visualization using Dash and Cytoscape.
 Analyzes Python package dependencies and displays them in an interactive web interface.
 
 Build: docker build -t deplens .
-Run: docker run --rm -it -p 8080:8080 -v "$(pwd)/graphs:/graphs" deplens
+Run: docker run --rm -it -p 8080:8080 -v "$(pwd)/graphs:/graphs" -v "$(pwd)/models:/models" deplens
 
 """
 
@@ -458,12 +458,16 @@ def ast_to_cytoscape_elements(node: ast.AST, parent_id: str = None) -> List[Dict
         elif isinstance(value, list):
             details[field] = f"List[{len(value)}]"
     
+    # Add line number information
+    line_number = getattr(node, 'lineno', None)
+    
     # Create node with enhanced information
     node_data = {
         'id': node_id,
-        'label': node_type,
+        'label': f"{node_type}{' (L' + str(line_number) + ')' if line_number else ''}",
         'type': node_type,
-        'details': details
+        'details': details,
+        'line_number': line_number
     }
     
     elements.append({
@@ -846,7 +850,6 @@ def toggle_ast_modal(file_clicks, is_open):
     elements = generate_ast_graph(file_path)
     
     if elements:
-        print(f"Generated {len(elements)} AST elements")
         return True, elements
     else:
         print("No AST elements generated")

@@ -7,4 +7,3 @@ dash-cytoscape[all]>=0.3.0
 dash-bootstrap-components>=1.0.0
 dash>=2.0.0
 bandit >= 1.7.5
-

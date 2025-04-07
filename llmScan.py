@@ -80,7 +80,7 @@ try:
     model = OllamaLLM(
         model="llama3.1:8b", 
         temperature=0,
-        base_url="http://localhost:11434"  # Connect to the local Ollama server
+        base_url="http://host.docker.internal:11434"  # Connect to the host Ollama server
     )
 except Exception as e:
     print(f"Error initializing OllamaLLM: {e}")
@@ -88,7 +88,7 @@ except Exception as e:
     model = OllamaLLM.from_model_id(
         model_id="llama3.1:8b",
         temperature=0,
-        base_url="http://localhost:11434"
+        base_url="http://host.docker.internal:11434"
     )
 
 prompt = ChatPromptTemplate.from_template(template)
@@ -152,9 +152,10 @@ def main(python_file_path=None):
     success, result = scan_vulnerabilities(python_file_path)
     
     if success:
-        # Save the analyzed JSON output
-        output_file = os.path.join("results", f"{os.path.basename(python_file_path)}_analysis.json")
+        # Always use a standardized output file name
+        output_file = os.path.join("results", "analyzed_ast.json")
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        
         with open(output_file, 'w') as f:
             json.dump(result, f, indent=2)
             
@@ -165,7 +166,13 @@ def main(python_file_path=None):
         if vulns > 0:
             print(f"Found {vulns} potential vulnerabilities")
         else:
-            print("No vulnerabilities detected.")
+            print("✅ Security scan completed: No vulnerabilities detected!")
+            # Also ensure the "vulnerable" flag is set to false when no issues found
+            if result.get("vulnerable", True):
+                result["vulnerable"] = False
+                # Update the file with the corrected vulnerable flag
+                with open(output_file, 'w') as f:
+                    json.dump(result, f, indent=2)
         
         return result
     else:

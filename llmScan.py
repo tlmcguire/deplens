@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import re
+import shutil
 
 def load_python_file(file_path):
     with open(file_path, 'r') as file:
@@ -135,6 +136,33 @@ def scan_vulnerabilities(python_code_path):
     except Exception as e:
         return False, f"Error: {str(e)}"
 
+def get_analysis_filename(python_file_path):
+    """
+    Generate analysis filename from Python file path.
+    Example: /path/to/Example.py -> Example_analysis.json
+    """
+    base_name = os.path.basename(python_file_path)
+    file_name = os.path.splitext(base_name)[0]  # Remove .py extension
+    return f"{file_name}_analysis.json"
+
+def clear_results_directory():
+    """
+    Clear the results directory at startup
+    """
+    results_dir = os.path.join(os.getcwd(), "results")
+    if os.path.exists(results_dir):
+        print(f"Clearing results directory: {results_dir}")
+        # Remove all files but keep the directory
+        for file_name in os.listdir(results_dir):
+            file_path = os.path.join(results_dir, file_name)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+    else:
+        # Create the directory if it doesn't exist
+        os.makedirs(results_dir, exist_ok=True)
+        print(f"Created results directory: {results_dir}")
+
+# Update the main function to use file-specific output names
 def main(python_file_path=None):
     """
     Main function that runs the vulnerability scanner on a Python file.
@@ -152,8 +180,9 @@ def main(python_file_path=None):
     success, result = scan_vulnerabilities(python_file_path)
     
     if success:
-        # Always use a standardized output file name
-        output_file = os.path.join("results", "analyzed_ast.json")
+        # Generate file-specific analysis filename
+        analysis_filename = get_analysis_filename(python_file_path)
+        output_file = os.path.join("results", analysis_filename)
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         
         with open(output_file, 'w') as f:
@@ -179,5 +208,8 @@ def main(python_file_path=None):
         print(result)  # Print error message
         return None
 
-if __name__ == '__main__':
+# Correct placement of the if __name__ block at module level
+if __name__ == "__main__":
+    # Clear results directory only when running as a script
+    clear_results_directory()
     main()

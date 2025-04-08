@@ -3,6 +3,7 @@ Interactive dependency graph visualization using Dash and Cytoscape.
 Analyzes Python package dependencies and displays them in an interactive web interface.
 
 Build: docker build -t deplens .
+In a separate terminal, run: ollama serve
 Run: docker run --rm -it -p 8080:8080 --add-host=host.docker.internal:host-gateway -v "$(pwd)/graphs:/graphs" -v "$(pwd)/models:/models" -v "$(pwd)/results:/app/results" deplens
 
 """
@@ -267,11 +268,38 @@ def initialize_data():
         # Set default elements if initialization fails
         elements = [{'data': {'id': package, 'label': package, 'security': 'secure'}}]
 
+def get_analysis_filename(python_file_path):
+    """
+    Generate analysis filename from Python file path.
+    Example: /path/to/Example.py -> Example_analysis.json
+    """
+    base_name = os.path.basename(python_file_path)
+    file_name = os.path.splitext(base_name)[0]  # Remove .py extension
+    return f"{file_name}_analysis.json"
+
+def clear_results_directory():
+    """
+    Clear the results directory at startup
+    """
+    results_dir = os.path.join(os.getcwd(), "results")
+    if os.path.exists(results_dir):
+        print(f"Clearing results directory: {results_dir}")
+        for file_name in os.listdir(results_dir):
+            file_path = os.path.join(results_dir, file_name)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+    else:
+        os.makedirs(results_dir, exist_ok=True)
+        print(f"Created results directory: {results_dir}")
+
 def initialize():
     """Initialize the environment once."""
     global initialized
     if initialized:
         return
+    
+    # Clear results directory at startup
+    clear_results_directory()
     
     if not os.path.exists('/packages'):
         download_and_extract_packages(set([package]), '/packages')
@@ -1004,12 +1032,15 @@ def run_ast_security_analysis(n_clicks, elements):
     try:
         # Create results directory if it doesn't exist
         os.makedirs('results', exist_ok=True)
-        results_path = 'results/analyzed_ast.json'
+        
+        # Get analysis filename for the current file
+        analysis_filename = get_analysis_filename(current_ast_file)
+        results_path = os.path.join('results', analysis_filename)
         
         # ALWAYS generate a fresh analysis for the current file
         print(f"Running LLM security analysis on {current_ast_file}")
         try:
-            # First delete any existing analysis to force a fresh scan
+            # First delete any existing analysis to ensure fresh scan
             if os.path.exists(results_path):
                 os.remove(results_path)
                 print(f"Removed previous analysis file to ensure fresh scan")
@@ -1031,7 +1062,8 @@ def run_ast_security_analysis(n_clicks, elements):
         
         # Check if results file exists after analysis
         if not os.path.exists(results_path):
-            return no_update, html.Div("Analysis did not produce results file", style={'color': '#ff4444'})
+            return no_update, html.Div(f"Analysis did not produce results file: {results_path}", 
+                                     style={'color': '#ff4444'})
         
         # Load the vulnerability data
         with open(results_path, 'r') as f:

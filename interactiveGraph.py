@@ -869,27 +869,27 @@ def update_panel_content(tab, node_data):
     elif tab == 'files':
         return get_file_structure(package_name)
 
-# Callback to update package details
+# Update the callback to reset analysis results when opening the modal for a new file
 @app.callback(
     Output('ast-modal', 'is_open'),
     Output('ast-graph', 'elements'),
-    Output('ast-initial-message', 'children'),  # Use different output component
+    Output('ast-initial-message', 'children'),
+    Output('ast-analysis-result', 'children'),  # Add this output
     Input({'type': 'python-file', 'path': ALL}, 'n_clicks'),
     State('ast-modal', 'is_open')
 )
 def toggle_ast_modal(file_clicks, is_open):
     """Toggle AST visualization modal and update graph elements."""
-    global current_ast_file  # Add global reference
+    global current_ast_file
     
     ctx = callback_context
     if not ctx.triggered:
-        return False, [], html.Div()
+        return False, [], html.Div(), html.Div()  # Empty div for analysis results
     
-    # Get the triggered prop_id, expected as a string like:
-    # '{"type":"python-file","path":"/path/to/file.py"}.n_clicks'
+    # Get the triggered prop_id
     triggered_prop = ctx.triggered[0]['prop_id']
     if '.n_clicks' not in triggered_prop:
-        return False, [], html.Div()
+        return False, [], html.Div(), html.Div()
         
     # Extract only the component id part
     component_id_str = triggered_prop.split('.n_clicks')[0]
@@ -902,28 +902,28 @@ def toggle_ast_modal(file_clicks, is_open):
             id_dict = ast.literal_eval(component_id_str)
         except Exception as e:
             print(f"Failed to parse component ID: {e}")
-            return False, [], html.Div()
+            return False, [], html.Div(), html.Div()
     
     file_path = id_dict.get('path')
     if not file_path:
         print("No file path found in component ID")
-        return False, [], html.Div()
+        return False, [], html.Div(), html.Div()
     
     # Ensure at least one click exists
     if not any(file_clicks):
-        return False, [], html.Div()
+        return False, [], html.Div(), html.Div()
     
     print(f"Generating AST for file: {file_path}")
     # Save the current file path globally
-    current_ast_file = file_path  # Update global variable
+    current_ast_file = file_path
     
     elements = generate_ast_graph(file_path)
     
     if elements:
-        return True, elements, html.Div("Click 'Run LLM Security Analysis' to check for vulnerabilities")
+        return True, elements, html.Div("Click 'Run LLM Security Analysis' to check for vulnerabilities"), html.Div()
     else:
         print("No AST elements generated")
-        return False, [], html.Div()
+        return False, [], html.Div(), html.Div()
 
 # Bandit analysis callback
 @app.callback(
@@ -1014,10 +1014,10 @@ def run_security_analysis(n_clicks, current_elements):
         print(f"Security analysis error: {str(e)}")
         return no_update, no_update, f"Error during security analysis: {str(e)}", "Run Bandit Security Analysis"
 
-# AST security analysis callback
+# AST security analysis callback - add allow_duplicate=True parameter
 @app.callback(
     Output('ast-graph', 'stylesheet'),
-    Output('ast-analysis-result', 'children'),
+    Output('ast-analysis-result', 'children', allow_duplicate=True),  # Add allow_duplicate parameter
     Input('ast-security-btn', 'n_clicks'),
     State('ast-graph', 'elements'),
     prevent_initial_call=True

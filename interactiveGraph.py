@@ -869,14 +869,16 @@ def update_panel_content(tab, node_data):
     elif tab == 'files':
         return get_file_structure(package_name)
 
-# Update the callback to reset analysis results when opening the modal for a new file
+# Update the callback to reset both analysis results and stylesheet when opening a new file
 @app.callback(
     Output('ast-modal', 'is_open'),
     Output('ast-graph', 'elements'),
     Output('ast-initial-message', 'children'),
-    Output('ast-analysis-result', 'children'),  # Add this output
+    Output('ast-analysis-result', 'children'),
+    Output('ast-graph', 'stylesheet', allow_duplicate=True),  # Add stylesheet output with allow_duplicate
     Input({'type': 'python-file', 'path': ALL}, 'n_clicks'),
-    State('ast-modal', 'is_open')
+    State('ast-modal', 'is_open'),
+    prevent_initial_call=True
 )
 def toggle_ast_modal(file_clicks, is_open):
     """Toggle AST visualization modal and update graph elements."""
@@ -884,12 +886,12 @@ def toggle_ast_modal(file_clicks, is_open):
     
     ctx = callback_context
     if not ctx.triggered:
-        return False, [], html.Div(), html.Div()  # Empty div for analysis results
+        return False, [], html.Div(), html.Div(), no_update
     
     # Get the triggered prop_id
     triggered_prop = ctx.triggered[0]['prop_id']
     if '.n_clicks' not in triggered_prop:
-        return False, [], html.Div(), html.Div()
+        return False, [], html.Div(), html.Div(), no_update
         
     # Extract only the component id part
     component_id_str = triggered_prop.split('.n_clicks')[0]
@@ -902,16 +904,16 @@ def toggle_ast_modal(file_clicks, is_open):
             id_dict = ast.literal_eval(component_id_str)
         except Exception as e:
             print(f"Failed to parse component ID: {e}")
-            return False, [], html.Div(), html.Div()
+            return False, [], html.Div(), html.Div(), no_update
     
     file_path = id_dict.get('path')
     if not file_path:
         print("No file path found in component ID")
-        return False, [], html.Div(), html.Div()
+        return False, [], html.Div(), html.Div(), no_update
     
     # Ensure at least one click exists
     if not any(file_clicks):
-        return False, [], html.Div(), html.Div()
+        return False, [], html.Div(), html.Div(), no_update
     
     print(f"Generating AST for file: {file_path}")
     # Save the current file path globally
@@ -919,11 +921,45 @@ def toggle_ast_modal(file_clicks, is_open):
     
     elements = generate_ast_graph(file_path)
     
+    # Default stylesheet - reset to clean state for new file
+    default_stylesheet = [
+        {
+            'selector': 'node',
+            'style': {
+                'content': 'data(label)',
+                'color': 'white',
+                'text-wrap': 'wrap',
+                'text-valign': 'center',
+                'text-halign': 'center',
+                'shape': 'round-rectangle',  
+                'width': '100px',  
+                'height': '50px',  
+                'background-color': '#018786',  
+                'border-width': '2px',
+                'border-color': '#333333',
+                'border-radius': '5%',
+                'padding': '2px'
+            }
+        },
+        {
+            'selector': 'edge',
+            'style': {
+                'line-color': '#018786',  
+                'width': 2,
+                'curve-style': 'bezier',  
+                'target-arrow-color': '#018786',
+                'target-arrow-shape': 'triangle',
+                'arrow-scale': 2,
+                'target-arrow-fill': 'filled'
+            }
+        }
+    ]
+    
     if elements:
-        return True, elements, html.Div("Click 'Run LLM Security Analysis' to check for vulnerabilities"), html.Div()
+        return True, elements, html.Div("Click 'Run LLM Security Analysis' to check for vulnerabilities"), html.Div(), default_stylesheet
     else:
         print("No AST elements generated")
-        return False, [], html.Div(), html.Div()
+        return False, [], html.Div(), html.Div(), no_update
 
 # Bandit analysis callback
 @app.callback(

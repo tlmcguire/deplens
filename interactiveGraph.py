@@ -1116,8 +1116,10 @@ def run_ast_security_analysis(n_clicks, elements):
                     stylesheet.append({
                         'selector': f'node[line_number = {line_number}]',
                         'style': {
-                            'border-color': '#ff4444',  # Red border
-                            'border-width': '3px'
+                            'background-color': '#ff4444',  # Red background for vulnerable nodes
+                            'border-color': '#ff4444',
+                            'border-width': '3px',
+                            'color': 'white'
                         }
                     })
             

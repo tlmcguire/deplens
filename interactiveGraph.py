@@ -3,7 +3,8 @@ Interactive dependency graph visualization using Dash and Cytoscape.
 Analyzes Python package dependencies and displays them in an interactive web interface.
 
 Build: docker build -t deplens .
-Run: docker run --rm -it -p 8080:8080 -v "$(pwd)/graphs:/graphs" deplens
+In a separate terminal, run: ollama serve
+Run: docker run --rm -it -p 8080:8080 --add-host=host.docker.internal:host-gateway -v "$(pwd)/graphs:/graphs" -v "$(pwd)/models:/models" -v "$(pwd)/results:/app/results" deplens
 
 """
 
@@ -49,6 +50,7 @@ package = 'flask'
 elements = []  # Default empty list
 vulnerable_files = set()
 package_bandit_results = {} 
+current_ast_file = None  # Add this to track the current file in AST view
 
 def is_package_installed(package_name):
     """Check if package is already installed."""
@@ -266,11 +268,38 @@ def initialize_data():
         # Set default elements if initialization fails
         elements = [{'data': {'id': package, 'label': package, 'security': 'secure'}}]
 
+def get_analysis_filename(python_file_path):
+    """
+    Generate analysis filename from Python file path.
+    Example: /path/to/Example.py -> Example_analysis.json
+    """
+    base_name = os.path.basename(python_file_path)
+    file_name = os.path.splitext(base_name)[0]  # Remove .py extension
+    return f"{file_name}_analysis.json"
+
+def clear_results_directory():
+    """
+    Clear the results directory at startup
+    """
+    results_dir = os.path.join(os.getcwd(), "results")
+    if os.path.exists(results_dir):
+        print(f"Clearing results directory: {results_dir}")
+        for file_name in os.listdir(results_dir):
+            file_path = os.path.join(results_dir, file_name)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+    else:
+        os.makedirs(results_dir, exist_ok=True)
+        print(f"Created results directory: {results_dir}")
+
 def initialize():
     """Initialize the environment once."""
     global initialized
     if initialized:
         return
+    
+    # Clear results directory at startup
+    clear_results_directory()
     
     if not os.path.exists('/packages'):
         download_and_extract_packages(set([package]), '/packages')
@@ -458,12 +487,16 @@ def ast_to_cytoscape_elements(node: ast.AST, parent_id: str = None) -> List[Dict
         elif isinstance(value, list):
             details[field] = f"List[{len(value)}]"
     
+    # Add line number information
+    line_number = getattr(node, 'lineno', None)
+    
     # Create node with enhanced information
     node_data = {
         'id': node_id,
-        'label': node_type,
+        'label': f"{node_type}{' (L' + str(line_number) + ')' if line_number else ''}",
         'type': node_type,
-        'details': details
+        'details': details,
+        'line_number': line_number
     }
     
     elements.append({
@@ -602,32 +635,36 @@ app.layout = html.Div([
                 style={'width': '100%', 'height': '80vh', 'background-color': '#222222'},
                 elements=elements,
                 stylesheet=[
-                    {'selector': 'node', 
-                     'style': {
-                         'content': 'data(label)', 
-                         'color': 'white', 
-                         'text-wrap': 'wrap', 
-                         'text-valign': 'center', 
-                         'text-halign': 'center',
-                         'shape': 'round-rectangle',
-                         'width': '100px',
-                         'height': '50px',
-                         'background-color': '#018786',  # Teal color
-                         'border-width': '2px',
-                         'border-color': '#018786',  # Match border to node color initially
-                         'border-radius': '5%',
-                         'padding': '2px'
-                     }},
-                    {'selector': 'edge', 
-                     'style': {
-                         'line-color': '#018786',
-                         'width': 2,
-                         'curve-style': 'bezier',
-                         'target-arrow-color': '#018786',
-                         'target-arrow-shape': 'triangle',
-                         'arrow-scale': 2,
-                         'target-arrow-fill': 'filled'
-                     }}
+                    {
+                        'selector': 'node',
+                        'style': {
+                            'content': 'data(label)',
+                            'color': 'white',
+                            'text-wrap': 'wrap',
+                            'text-valign': 'center',
+                            'text-halign': 'center',
+                            'shape': 'round-rectangle',  
+                            'width': '100px',  
+                            'height': '50px',  
+                            'background-color': '#018786',  
+                            'border-width': '2px',
+                            'border-color': '#333333',
+                            'border-radius': '5%',
+                            'padding': '2px'
+                        }
+                    },
+                    {
+                        'selector': 'edge',
+                        'style': {
+                            'line-color': '#018786',  
+                            'width': 2,
+                            'curve-style': 'bezier',  
+                            'target-arrow-color': '#018786',
+                            'target-arrow-shape': 'triangle',
+                            'arrow-scale': 2,
+                            'target-arrow-fill': 'filled'
+                        }
+                    }
                 ]
             )
         ], style={'width': '80%', 'display': 'inline-block', 'vertical-align': 'top'}),
@@ -686,6 +723,24 @@ app.layout = html.Div([
                     style={'border': 'none'}  
                 ),
                 dbc.ModalBody([
+                    # Add security analysis button at the top of modal body
+                    html.Div([
+                        html.Button(
+                            "Run LLM Security Analysis",
+                            id='ast-security-btn',
+                            style={
+                                'background-color': '#028786',
+                                'color': THEME['text'],
+                                'border': 'none',
+                                'padding': '10px 20px',
+                                'cursor': 'pointer',
+                                'margin-bottom': '15px'
+                            }
+                        ),
+                        # Split into two divs - one for initial message, one for analysis results
+                        html.Div(id='ast-initial-message', style={'color': THEME['text'], 'margin': '10px 0'}),
+                        html.Div(id='ast-analysis-result', style={'color': THEME['text'], 'margin': '10px 0'})
+                    ]),
                     cyto.Cytoscape(
                         id='ast-graph',
                         layout={
@@ -729,6 +784,20 @@ app.layout = html.Div([
                                     'target-arrow-shape': 'triangle',
                                     'arrow-scale': 2,
                                     'target-arrow-fill': 'filled'
+                                }
+                            },
+                            {
+                                'selector': 'node.secure',
+                                'style': {
+                                    'border-color': '#00C851',  # Green border for secure nodes
+                                    'border-width': '3px'
+                                }
+                            },
+                            {
+                                'selector': 'node.vulnerable',
+                                'style': {
+                                    'border-color': '#ff4444',  # Red border for vulnerable nodes
+                                    'border-width': '3px'
                                 }
                             }
                         ]
@@ -804,20 +873,23 @@ def update_panel_content(tab, node_data):
 @app.callback(
     Output('ast-modal', 'is_open'),
     Output('ast-graph', 'elements'),
-    [Input({'type': 'python-file', 'path': ALL}, 'n_clicks')],
-    [State('ast-modal', 'is_open')]
+    Output('ast-initial-message', 'children'),  # Use different output component
+    Input({'type': 'python-file', 'path': ALL}, 'n_clicks'),
+    State('ast-modal', 'is_open')
 )
 def toggle_ast_modal(file_clicks, is_open):
     """Toggle AST visualization modal and update graph elements."""
+    global current_ast_file  # Add global reference
+    
     ctx = callback_context
     if not ctx.triggered:
-        return False, []
+        return False, [], html.Div()
     
     # Get the triggered prop_id, expected as a string like:
     # '{"type":"python-file","path":"/path/to/file.py"}.n_clicks'
     triggered_prop = ctx.triggered[0]['prop_id']
     if '.n_clicks' not in triggered_prop:
-        return False, []
+        return False, [], html.Div()
         
     # Extract only the component id part
     component_id_str = triggered_prop.split('.n_clicks')[0]
@@ -827,30 +899,31 @@ def toggle_ast_modal(file_clicks, is_open):
         id_dict = json.loads(component_id_str)
     except json.JSONDecodeError:
         try:
-            import ast
             id_dict = ast.literal_eval(component_id_str)
         except Exception as e:
             print(f"Failed to parse component ID: {e}")
-            return False, []
+            return False, [], html.Div()
     
     file_path = id_dict.get('path')
     if not file_path:
         print("No file path found in component ID")
-        return False, []
+        return False, [], html.Div()
     
     # Ensure at least one click exists
     if not any(file_clicks):
-        return False, []
+        return False, [], html.Div()
     
     print(f"Generating AST for file: {file_path}")
+    # Save the current file path globally
+    current_ast_file = file_path  # Update global variable
+    
     elements = generate_ast_graph(file_path)
     
     if elements:
-        print(f"Generated {len(elements)} AST elements")
-        return True, elements
+        return True, elements, html.Div("Click 'Run LLM Security Analysis' to check for vulnerabilities")
     else:
         print("No AST elements generated")
-        return False, []
+        return False, [], html.Div()
 
 # Bandit analysis callback
 @app.callback(
@@ -940,6 +1013,167 @@ def run_security_analysis(n_clicks, current_elements):
     except Exception as e:
         print(f"Security analysis error: {str(e)}")
         return no_update, no_update, f"Error during security analysis: {str(e)}", "Run Bandit Security Analysis"
+
+# AST security analysis callback
+@app.callback(
+    Output('ast-graph', 'stylesheet'),
+    Output('ast-analysis-result', 'children'),
+    Input('ast-security-btn', 'n_clicks'),
+    State('ast-graph', 'elements'),
+    prevent_initial_call=True
+)
+def run_ast_security_analysis(n_clicks, elements):
+    """Run LLM security analysis on the currently loaded AST."""
+    global current_ast_file
+    
+    if not n_clicks or not current_ast_file:
+        return no_update, no_update
+    
+    try:
+        # Create results directory if it doesn't exist
+        os.makedirs('results', exist_ok=True)
+        
+        # Get analysis filename for the current file
+        analysis_filename = get_analysis_filename(current_ast_file)
+        results_path = os.path.join('results', analysis_filename)
+        
+        # ALWAYS generate a fresh analysis for the current file
+        print(f"Running LLM security analysis on {current_ast_file}")
+        try:
+            # First delete any existing analysis to ensure fresh scan
+            if os.path.exists(results_path):
+                os.remove(results_path)
+                print(f"Removed previous analysis file to ensure fresh scan")
+                
+            cmd = [sys.executable, 'llmScan.py', current_ast_file]
+            process = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True
+            )
+            print(f"LLM scan completed: {process.stdout}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error running llmScan.py: {e}")
+            print(f"Stderr: {e.stderr}")
+            return no_update, html.Div(f"Error during security analysis: {str(e)}", 
+                                     style={'color': '#ff4444'})
+        
+        # Check if results file exists after analysis
+        if not os.path.exists(results_path):
+            return no_update, html.Div(f"Analysis did not produce results file: {results_path}", 
+                                     style={'color': '#ff4444'})
+        
+        # Load the vulnerability data
+        with open(results_path, 'r') as f:
+            security_data = json.load(f)
+        
+        # Update graph stylesheet
+        stylesheet = [
+            {
+                'selector': 'node',
+                'style': {
+                    'content': 'data(label)',
+                    'color': 'white',
+                    'text-wrap': 'wrap',
+                    'text-valign': 'center',
+                    'text-halign': 'center',
+                    'shape': 'round-rectangle',  
+                    'width': '100px',  
+                    'height': '50px',  
+                    'background-color': '#018786',  
+                    'border-width': '2px',
+                    'border-color': '#333333',
+                    'border-radius': '5%',
+                    'padding': '2px'
+                }
+            },
+            {
+                'selector': 'edge',
+                'style': {
+                    'line-color': '#018786',  
+                    'width': 2,
+                    'curve-style': 'bezier',  
+                    'target-arrow-color': '#018786',
+                    'target-arrow-shape': 'triangle',
+                    'arrow-scale': 2,
+                    'target-arrow-fill': 'filled'
+                }
+            }
+        ]
+        
+        # Create analysis report
+        vulnerabilities = security_data.get('vulnerabilities', [])
+        is_vulnerable = security_data.get('vulnerable', False)
+        
+        # Update node styles for vulnerable nodes
+        if is_vulnerable and vulnerabilities:
+            # Add style for vulnerable nodes
+            for vuln in vulnerabilities:
+                line_number = vuln.get('line_number')
+                if line_number:
+                    stylesheet.append({
+                        'selector': f'node[line_number = {line_number}]',
+                        'style': {
+                            'background-color': '#ff4444',  # Red background for vulnerable nodes
+                            'border-color': '#ff4444',
+                            'border-width': '3px',
+                            'color': 'white'
+                        }
+                    })
+            
+            # Generate vulnerability report
+            vuln_divs = [
+                html.Div([
+                    html.H4(f"Vulnerability at line {vuln.get('line_number')}", style={'color': '#ff4444'}),
+                    html.P(f"Type: {vuln.get('vulnerability_type')}", style={'fontWeight': 'bold'}),
+                    html.P(f"Severity: {vuln.get('severity', 'Unknown').upper()}", 
+                           style={'color': '#ff4444' if vuln.get('severity') == 'high' else '#FFC107'}),
+                    html.P(f"Description: {vuln.get('description')}"),
+                    html.P(f"Code: ", style={'marginBottom': '5px'}),
+                    html.Pre(vuln.get('code_snippet'), 
+                            style={'backgroundColor': '#333', 'padding': '10px', 'borderRadius': '5px'}),
+                    html.P(f"Remediation: {vuln.get('remediation')}"),
+                    html.Hr()
+                ])
+                for vuln in vulnerabilities
+            ]
+            
+
+            
+            result_message = [
+                html.H3(f"Security Analysis Results", style={'color': '#ff4444', 'marginBottom': '10px'}),
+                html.P(f"Found {len(vulnerabilities)} potential vulnerabilities in {os.path.basename(current_ast_file)}", 
+                      style={'fontWeight': 'bold'}),
+                html.Div(vuln_divs)
+            ]
+            # Filter None values
+            result_message = [item for item in result_message if item is not None]
+            
+        else:
+            # No vulnerabilities found
+            stylesheet.append({
+                'selector': 'node',
+                'style': {
+                    'border-color': '#00C851',  # Green border for all nodes
+                    'border-width': '3px'
+                }
+            })
+            
+            result_message = [
+                html.H4("✅ Security Analysis Complete", 
+                       style={'color': '#00C851', 'marginTop': '10px'}),
+                html.P("No security vulnerabilities were detected in this file.", 
+                      style={'color': '#00C851', 'fontWeight': 'bold'})
+            ]
+        
+        return stylesheet, result_message
+        
+    except Exception as e:
+        print(f"AST security analysis error: {str(e)}")
+        return no_update, html.Div(f"Error during security analysis: {str(e)}", 
+                                  style={'color': '#ff4444'})
 
 def main():
     initialize()

@@ -5,6 +5,7 @@ import os
 import sys
 import re
 import shutil
+import time
 
 def load_python_file(file_path):
     with open(file_path, 'r') as file:
@@ -50,7 +51,7 @@ Analyze this Python code for security vulnerabilities:
 ```
 
 
-Each line ends with a comment containing its line number (e.g., '# line 11'). Return your analyis as a JSON dictionary with the following structure:
+Return your analyis as a JSON dictionary with the following structure:
 ```json
 {{
   "vulnerable": true/false,
@@ -71,29 +72,58 @@ Each line ends with a comment containing its line number (e.g., '# line 11'). Re
 </user>
 """
 
-# Updated initialization approach for OllamaLLM with model_rebuild()
 from langchain_ollama import __version__ as ollama_version
 print(f"Using langchain_ollama version: {ollama_version}")
 
-# Initialize the LLM using a different approach to avoid Pydantic error
+# Configure LLM settings from environment variables with defaults
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+PRIMARY_MODEL = os.environ.get("OLLAMA_PRIMARY_MODEL", "gemma3:4b")
+FALLBACK_MODEL = os.environ.get("OLLAMA_FALLBACK_MODEL", "gemma3:4b")
+MAX_RETRIES = int(os.environ.get("OLLAMA_MAX_RETRIES", "3"))
+RETRY_DELAY = int(os.environ.get("OLLAMA_RETRY_DELAY", "5"))
+
+def initialize_llm(model_name=None):
+    """Initialize the LLM with retries and proper error handling"""
+    model_name = model_name or PRIMARY_MODEL
+    retries = 0
+    
+    while retries < MAX_RETRIES:
+        try:
+            print(f"Attempting to initialize LLM with model {model_name}...")
+            model = OllamaLLM(
+                model=model_name,
+                temperature=0,
+                base_url=OLLAMA_BASE_URL
+            )
+            # Test the model with a simple request to verify connection
+            _ = model.invoke("Test connection")
+            print(f"Successfully initialized model: {model_name}")
+            return model
+        except Exception as e:
+            retries += 1
+            print(f"Attempt {retries}/{MAX_RETRIES} failed: {str(e)}")
+            if retries < MAX_RETRIES:
+                print(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
+    
+    raise RuntimeError(f"Failed to initialize LLM after {MAX_RETRIES} attempts")
+
+# Try to initialize with primary model, fall back to alternative if needed
 try:
-    # Method 1: Using OllamaLLM with base_url for direct connection
-    model = OllamaLLM(
-        model="llama3.1:8b", 
-        temperature=0,
-        base_url="http://host.docker.internal:11434"  # Connect to the host Ollama server
-    )
+    model = initialize_llm(PRIMARY_MODEL)
 except Exception as e:
-    print(f"Error initializing OllamaLLM: {e}")
-    # Method 2: Alternative initialization if the first one fails
-    model = OllamaLLM.from_model_id(
-        model_id="llama3.1:8b",
-        temperature=0,
-        base_url="http://host.docker.internal:11434"
-    )
+    print(f"Primary model failed: {e}")
+    try:
+        print(f"Attempting fallback to {FALLBACK_MODEL}...")
+        model = initialize_llm(FALLBACK_MODEL)
+    except Exception as e:
+        print(f"Fallback model also failed: {e}")
+        model = None
+        print("WARNING: Running without a working LLM model. Scanning will fail.")
 
 prompt = ChatPromptTemplate.from_template(template)
-chain = prompt | model
+# Only create chain if model was successfully initialized
+chain = prompt | model if model is not None else None
 
 def scan_vulnerabilities(python_code_path):
     """
@@ -108,11 +138,27 @@ def scan_vulnerabilities(python_code_path):
             - result (dict or str): JSON analysis results if successful, error message if not
     """
     try:
+        # Check if LLM is available
+        if chain is None:
+            return False, "Error: No working LLM model available"
+            
         # Load Python code
         python_code = load_python_file(python_code_path)
         
-        # Invoke the chain using the key 'python_code' as defined in the prompt template
-        response = chain.invoke({"python_code": python_code})
+        # Invoke the chain with retries
+        retries = 0
+        while retries < MAX_RETRIES:
+            try:
+                response = chain.invoke({"python_code": python_code})
+                break
+            except Exception as e:
+                retries += 1
+                error_msg = f"LLM invocation failed (attempt {retries}/{MAX_RETRIES}): {str(e)}"
+                print(error_msg)
+                if retries >= MAX_RETRIES:
+                    return False, error_msg
+                print(f"Retrying in {RETRY_DELAY} seconds...")
+                time.sleep(RETRY_DELAY)
         
         json_text = response.strip()
         
@@ -132,7 +178,7 @@ def scan_vulnerabilities(python_code_path):
     except FileNotFoundError:
         return False, f"Error: Could not find file at {python_code_path}"
     except json.JSONDecodeError as e:
-        return False, f"Failed to parse LLM response as JSON. Error: {e}\nRaw response:\n{response}"
+        return False, f"Failed to parse LLM response as JSON"
     except Exception as e:
         return False, f"Error: {str(e)}"
 

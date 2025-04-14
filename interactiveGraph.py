@@ -718,7 +718,7 @@ app.layout = html.Div([
             },
             children=[
                 dbc.ModalHeader(
-                    html.H3("AST Visualization", style={'color': THEME['highlight']}),
+                    html.H3("AST Visualization", style={'color': THEME['node']}),
                     close_button=True,  
                     style={'border': 'none'}  
                 ),
@@ -1162,10 +1162,12 @@ def run_ast_security_analysis(n_clicks, elements):
             # Generate vulnerability report
             vuln_divs = [
                 html.Div([
-                    html.H4(f"Vulnerability at line {vuln.get('line_number')}", style={'color': '#ff4444'}),
+                    html.H4(f"Vulnerability at line {vuln.get('line_number')}", style={'color': '#018786'}),
                     html.P(f"Type: {vuln.get('vulnerability_type')}", style={'fontWeight': 'bold'}),
                     html.P(f"Severity: {vuln.get('severity', 'Unknown').upper()}", 
-                           style={'color': '#ff4444' if vuln.get('severity') == 'high' else '#FFC107'}),
+                           style={'color': '#ff4444' if vuln.get('severity') == 'high' 
+                                         else '#FFC107' if vuln.get('severity') == 'medium'
+                                         else '#00C851'}),
                     html.P(f"Description: {vuln.get('description')}"),
                     html.P(f"Code: ", style={'marginBottom': '5px'}),
                     html.Pre(vuln.get('code_snippet'), 
@@ -1179,7 +1181,7 @@ def run_ast_security_analysis(n_clicks, elements):
 
             
             result_message = [
-                html.H3(f"Security Analysis Results", style={'color': '#ff4444', 'marginBottom': '10px'}),
+                html.H3(f"Security Analysis Results", style={'color': '#018786', 'marginBottom': '10px'}),
                 html.P(f"Found {len(vulnerabilities)} potential vulnerabilities in {os.path.basename(current_ast_file)}", 
                       style={'fontWeight': 'bold'}),
                 html.Div(vuln_divs)

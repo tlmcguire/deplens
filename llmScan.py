@@ -57,7 +57,7 @@ Return your analyis as a JSON dictionary with the following structure:
   "vulnerable": true/false,
   "vulnerabilities": [
     {{
-      "line_number": int, (extract the number from the comment at the end of the line) 
+      "line_number": int,
       "node_type": "Function/Call/Assignment/etc",
       "code_snippet": "vulnerable code here",
       "vulnerability_type": "type of vulnerability",

@@ -51,7 +51,7 @@ COLORS = {
 
 # Global variables
 initialized = False
-package = 'flask'
+package = 'torch'
 elements = []  # Default empty list
 vulnerable_files = set()
 package_bandit_results = {} 
@@ -1173,7 +1173,7 @@ def run_ast_security_analysis(n_clicks, elements):
                         html.Span(f"{vuln.get('severity', 'Unknown').upper()}", 
                                style={'color': COLORS['error'] if vuln.get('severity') == 'high' 
                                              else COLORS['warning'] if vuln.get('severity') == 'medium'
-                                             else COLORS['success']})
+                                             else COLORS['success'] if vuln.get('severity') == 'low' else COLORS['error']})
                     ]),
                     html.P(f"Description: {vuln.get('description')}"),
                     html.P(f"Code: ", style={'marginBottom': '5px'}),

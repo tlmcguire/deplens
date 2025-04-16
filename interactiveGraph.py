@@ -35,13 +35,18 @@ logging.basicConfig(
 
 cyto.load_extra_layouts()
 
-# Dictionary for web interface theme colors
-THEME = {
-    'text': '#E0E0E0',  # Light gray
-    'highlight': '#4FC3F7',  # Light blue
-    'secondary': '#B0BEC5',  # Blue gray
-    'background': '#333333',  # Dark gray
-    'node': '#018786'  # Teal color for nodes
+# Simplified color palette with fewer base colors
+COLORS = {
+    'primary': '#008786',      # Teal - main brand color
+    'primary_text': '#00CDCD', # Brighter teal for headings and important text
+    'text': '#ffffff',         # White - text color on dark backgrounds
+    'success': '#00C851',      # Green - for secure/success indications
+    'warning': '#ffbb33',      # Yellow - for warnings/medium severity
+    'error': '#ff4444',        # Red - for errors/insecure/high severity
+    'dark': '#222222',         # Dark background
+    'gray_dark': '#333333',    # Dark gray for borders
+    'gray_light': '#444444',   # Light gray for sidebar
+    'secondary': '#BBBBBB'     # Light gray for secondary text (improved contrast)
 }
 
 # Global variables
@@ -387,12 +392,12 @@ def get_file_structure(package_name):
         package_data = find_package_in_tree(package_name, dependency_tree)
         if not package_data:
             return html.Div(f"Package {package_name} not found in dependency tree",
-                          style={'color': THEME['secondary']})
+                          style={'color': COLORS['secondary']})
         
         package_dir = package_data.get('source_paths', {}).get('package_dir')
         if not package_dir or not os.path.exists(package_dir):
             return html.Div(f"No files found for {package_name}",
-                          style={'color': THEME['secondary']})
+                          style={'color': COLORS['secondary']})
         
         def build_tree(path):
             name = os.path.basename(path)
@@ -419,7 +424,7 @@ def get_file_structure(package_name):
                 return html.Details([
                     html.Summary(
                         icon + node.name,
-                        style={'color': THEME['highlight'], 'cursor': 'pointer'}
+                        style={'color': COLORS['primary_text'], 'cursor': 'pointer', 'fontWeight': 'bold'}
                     ),
                     html.Ul([
                         render_node(child) for child in node.children
@@ -434,7 +439,7 @@ def get_file_structure(package_name):
                         icon + node.name,
                         id={'type': 'python-file', 'path': node.path},
                         style={
-                            'color': '#ff4444' if is_vulnerable else THEME['text'],  # Red if vulnerable
+                            'color': COLORS['error'] if is_vulnerable else COLORS['text'],
                             'textDecoration': 'none',
                             'cursor': 'pointer',
                             'fontWeight': 'bold' if is_vulnerable else 'normal'
@@ -445,19 +450,19 @@ def get_file_structure(package_name):
             
             return html.Li(
                 icon + node.name,
-                style={'color': THEME['text'], 'listStyleType': 'none'}
+                style={'color': COLORS['secondary'], 'listStyleType': 'none'}
             )
         
         root = build_tree(package_dir)
         return html.Div([
             html.H3(f"Files for {package_name}",
-                   style={'color': THEME['highlight']}),
+                   style={'color': COLORS['primary_text']}),
             render_node(root)
         ])
         
     except Exception as e:
         return html.Div(f"Error loading files: {str(e)}",
-                       style={'color': THEME['secondary']})
+                       style={'color': COLORS['secondary']})
     
 def transform_ast(node):
     """Convert AST node to dictionary structure with all fields."""
@@ -624,31 +629,31 @@ initialize()  # Call once at startup
 
 app.layout = html.Div([
     html.Div([
-        html.H1("DepLens", style={'text-align': 'left', 'color': 'white'}),
-        html.Div(id='output-div', style={'padding': '2px', 'color': 'white'})
-    ], style={'background-color': '#222222', 'padding': '3px', 'width': '80%'}),
+        html.H1("DepLens", style={'text-align': 'left', 'color': COLORS['text']}),
+        html.Div(id='output-div', style={'padding': '2px', 'color': COLORS['text']})
+    ], style={'background-color': COLORS['dark'], 'padding': '3px', 'width': '80%'}),
     html.Div([
         html.Div([
             cyto.Cytoscape(
                 id='cytoscape',
                 layout={'name': 'dagre'}, 
-                style={'width': '100%', 'height': '80vh', 'background-color': '#222222'},
+                style={'width': '100%', 'height': '80vh', 'background-color': COLORS['dark']},
                 elements=elements,
                 stylesheet=[
                     {
                         'selector': 'node',
                         'style': {
                             'content': 'data(label)',
-                            'color': 'white',
+                            'color': COLORS['text'],
                             'text-wrap': 'wrap',
                             'text-valign': 'center',
                             'text-halign': 'center',
                             'shape': 'round-rectangle',  
                             'width': '100px',  
                             'height': '50px',  
-                            'background-color': '#018786',  
+                            'background-color': COLORS['primary'],  
                             'border-width': '2px',
-                            'border-color': '#333333',
+                            'border-color': COLORS['gray_dark'],
                             'border-radius': '5%',
                             'padding': '2px'
                         }
@@ -656,10 +661,10 @@ app.layout = html.Div([
                     {
                         'selector': 'edge',
                         'style': {
-                            'line-color': '#018786',  
+                            'line-color': COLORS['primary'],  
                             'width': 2,
                             'curve-style': 'bezier',  
-                            'target-arrow-color': '#018786',
+                            'target-arrow-color': COLORS['primary'],
                             'target-arrow-shape': 'triangle',
                             'arrow-scale': 2,
                             'target-arrow-fill': 'filled'
@@ -669,8 +674,8 @@ app.layout = html.Div([
             )
         ], style={'width': '80%', 'display': 'inline-block', 'vertical-align': 'top'}),
         html.Div([
-            html.H3("Package Details", style={'color': 'white'}),
-            html.Div(id='package-details', style={'color': 'white'}),
+            html.H3("Package Details", style={'color': COLORS['text']}),
+            html.Div(id='package-details', style={'color': COLORS['text']}),
             dcc.Tabs(
                 id='info-tabs',
                 value='details',
@@ -678,27 +683,27 @@ app.layout = html.Div([
                     dcc.Tab(
                         label='Details',
                         value='details',
-                        style={'color': THEME['text']},
-                        selected_style={'color': THEME['highlight']}
+                        style={'color': COLORS['text']},
+                        selected_style={'color': COLORS['primary']}
                     ),
                     dcc.Tab(
                         label='Files',
                         value='files',
-                        style={'color': THEME['text']},
-                        selected_style={'color': THEME['highlight']}
+                        style={'color': COLORS['text']},
+                        selected_style={'color': COLORS['primary']}
                     )
                 ],
-                style={'background': THEME['background']}
+                style={'background': COLORS['gray_light']}
             ),
             html.Div(
                 id='single-content-area',
-                style={'color': THEME['text'], 'padding': '15px'}
+                style={'color': COLORS['text'], 'padding': '15px'}
             )
         ], style={
             'width': '22%',
             'display': 'inline-block',
             'vertical-align': 'top',
-            'background': THEME['background'],
+            'background': COLORS['gray_light'],  # Changed from COLORS['dark']
             'height': '92.3vh',
             'overflow-y': 'auto',
             'float': 'right',
@@ -713,12 +718,12 @@ app.layout = html.Div([
             id='ast-modal',
             is_open=False,
             style={
-                'backgroundColor': THEME['background'],
-                'color': THEME['text']
+                'backgroundColor': COLORS['dark'],
+                'color': COLORS['text']
             },
             children=[
                 dbc.ModalHeader(
-                    html.H3("AST Visualization", style={'color': THEME['node']}),
+                    html.H3("AST Visualization", style={'color': COLORS['primary_text']}),
                     close_button=True,  
                     style={'border': 'none'}  
                 ),
@@ -729,8 +734,8 @@ app.layout = html.Div([
                             "Run LLM Security Analysis",
                             id='ast-security-btn',
                             style={
-                                'background-color': '#028786',
-                                'color': THEME['text'],
+                                'background-color': COLORS['primary'],
+                                'color': COLORS['text'],
                                 'border': 'none',
                                 'padding': '10px 20px',
                                 'cursor': 'pointer',
@@ -738,8 +743,8 @@ app.layout = html.Div([
                             }
                         ),
                         # Split into two divs - one for initial message, one for analysis results
-                        html.Div(id='ast-initial-message', style={'color': THEME['text'], 'margin': '10px 0'}),
-                        html.Div(id='ast-analysis-result', style={'color': THEME['text'], 'margin': '10px 0'})
+                        html.Div(id='ast-initial-message', style={'color': COLORS['text'], 'margin': '10px 0'}),
+                        html.Div(id='ast-analysis-result', style={'color': COLORS['text'], 'margin': '10px 0'})
                     ]),
                     cyto.Cytoscape(
                         id='ast-graph',
@@ -760,16 +765,16 @@ app.layout = html.Div([
                                 'selector': 'node',
                                 'style': {
                                     'content': 'data(label)',
-                                    'color': 'white',
+                                    'color': COLORS['text'],
                                     'text-wrap': 'wrap',
                                     'text-valign': 'center',
                                     'text-halign': 'center',
                                     'shape': 'round-rectangle',  
                                     'width': '100px',  
                                     'height': '50px',  
-                                    'background-color': '#018786',  
+                                    'background-color': COLORS['primary'],  
                                     'border-width': '2px',
-                                    'border-color': '#333333',
+                                    'border-color': COLORS['gray_dark'],
                                     'border-radius': '5%',
                                     'padding': '2px'
                                 }
@@ -777,10 +782,10 @@ app.layout = html.Div([
                             {
                                 'selector': 'edge',
                                 'style': {
-                                    'line-color': '#018786',  
+                                    'line-color': COLORS['primary'],  
                                     'width': 2,
                                     'curve-style': 'bezier',  
-                                    'target-arrow-color': '#018786',
+                                    'target-arrow-color': COLORS['primary'],
                                     'target-arrow-shape': 'triangle',
                                     'arrow-scale': 2,
                                     'target-arrow-fill': 'filled'
@@ -789,14 +794,14 @@ app.layout = html.Div([
                             {
                                 'selector': 'node.secure',
                                 'style': {
-                                    'border-color': '#00C851',  # Green border for secure nodes
+                                    'border-color': COLORS['success'],  # Green border for secure nodes
                                     'border-width': '3px'
                                 }
                             },
                             {
                                 'selector': 'node.vulnerable',
                                 'style': {
-                                    'border-color': '#ff4444',  # Red border for vulnerable nodes
+                                    'border-color': COLORS['error'],  # Red border for vulnerable nodes
                                     'border-width': '3px'
                                 }
                             }
@@ -812,8 +817,8 @@ app.layout = html.Div([
         "Run Bandit Security Analysis",
         id='analyze-security-btn',
         style={
-            'background-color': '#028786',
-            'color': THEME['text'],
+            'background-color': COLORS['primary'],
+            'color': COLORS['text'],
             'border': 'none',
             'padding': '10px 20px',
             'cursor': 'pointer',
@@ -830,7 +835,7 @@ app.layout = html.Div([
 )
 def update_panel_content(tab, node_data):
     if not node_data:
-        return html.Div("Select a package", style={'color': THEME['secondary']})
+        return html.Div("Select a package", style={'color': COLORS['secondary']})
     
     package_name = node_data['id'].lower()
     logging.debug(f"Update panel for package: {package_name}")
@@ -852,24 +857,23 @@ def update_panel_content(tab, node_data):
         else:
             bandit_display = html.Div(
                 "No vulnerabilities detected.",
-                style={'color': THEME['text'], 'marginTop': '10px'}
+                style={'color': COLORS['text'], 'marginTop': '10px'}
             )
         
         return html.Div([
-            html.H3(metadata['name'], style={'color': THEME['highlight']}),
-            html.P(f"Version: {metadata['version']}", style={'color': THEME['text']}),
-            html.P(f"Author: {metadata['author'] or 'Unknown'}", style={'color': THEME['text']}),
-            html.P(f"License: {metadata['license'] or 'Unknown'}", style={'color': THEME['text']}),
-            html.P("Description:", style={'color': THEME['highlight'], 'marginBottom': '5px'}),
-            html.P(metadata['description'], style={'color': THEME['text']}),
-            html.P("Bandit Analysis:", style={'color': THEME['highlight'], 'marginBottom': '5px'}),
+            html.H3(metadata['name'], style={'color': COLORS['primary_text']}),
+            html.P(f"Version: {metadata['version']}", style={'color': COLORS['text']}),
+            html.P(f"Author: {metadata['author'] or 'Unknown'}", style={'color': COLORS['text']}),
+            html.P(f"License: {metadata['license'] or 'Unknown'}", style={'color': COLORS['text']}),
+            html.P("Description:", style={'color': COLORS['primary_text'], 'marginBottom': '5px'}),
+            html.P(metadata['description'], style={'color': COLORS['text']}),
+            html.P("Bandit Analysis:", style={'color': COLORS['primary_text'], 'marginBottom': '5px'}),
             bandit_display, 
         ])
     
     elif tab == 'files':
         return get_file_structure(package_name)
 
-# Update the callback to reset both analysis results and stylesheet when opening a new file
 @app.callback(
     Output('ast-modal', 'is_open'),
     Output('ast-graph', 'elements'),
@@ -927,16 +931,16 @@ def toggle_ast_modal(file_clicks, is_open):
             'selector': 'node',
             'style': {
                 'content': 'data(label)',
-                'color': 'white',
+                'color': COLORS['text'],
                 'text-wrap': 'wrap',
                 'text-valign': 'center',
                 'text-halign': 'center',
                 'shape': 'round-rectangle',  
                 'width': '100px',  
                 'height': '50px',  
-                'background-color': '#018786',  
+                'background-color': COLORS['primary'],  
                 'border-width': '2px',
-                'border-color': '#333333',
+                'border-color': COLORS['gray_dark'],
                 'border-radius': '5%',
                 'padding': '2px'
             }
@@ -944,10 +948,10 @@ def toggle_ast_modal(file_clicks, is_open):
         {
             'selector': 'edge',
             'style': {
-                'line-color': '#018786',  
+                'line-color': COLORS['primary'],  
                 'width': 2,
                 'curve-style': 'bezier',  
-                'target-arrow-color': '#018786',
+                'target-arrow-color': COLORS['primary'],
                 'target-arrow-shape': 'triangle',
                 'arrow-scale': 2,
                 'target-arrow-fill': 'filled'
@@ -989,16 +993,16 @@ def run_security_analysis(n_clicks, current_elements):
                 'selector': 'node',
                 'style': {
                     'content': 'data(label)',
-                    'color': 'white',
+                    'color': COLORS['text'],
                     'text-wrap': 'wrap',
                     'text-valign': 'center',
                     'text-halign': 'center',
                     'shape': 'round-rectangle',
                     'width': '100px',
                     'height': '50px',
-                    'background-color': '#018786',  # Keep teal for all nodes
+                    'background-color': COLORS['primary'],
                     'border-width': '2px',
-                    'border-color': '#018786',  # Match border to node color by default
+                    'border-color': COLORS['primary'],  # Match border to node color by default
                     'border-radius': '5%',
                     'padding': '2px'
                 }
@@ -1006,22 +1010,22 @@ def run_security_analysis(n_clicks, current_elements):
             {
                 'selector': 'node[security = "vulnerable"]',
                 'style': {
-                    'border-color': '#ff4444'  # Red border for vulnerable
+                    'border-color': COLORS['error']  # Red border for vulnerable
                 }
             },
             {
                 'selector': 'node[security = "secure"]',
                 'style': {
-                    'border-color': '#00C851'  # Green border for secure
+                    'border-color': COLORS['success']  # Green border for secure
                 }
             },
             {
                 'selector': 'edge',
                 'style': {
-                    'line-color': '#018786',
+                    'line-color': COLORS['primary'],
                     'width': 2,
                     'curve-style': 'bezier',
-                    'target-arrow-color': '#018786',
+                    'target-arrow-color': COLORS['primary'],
                     'target-arrow-shape': 'triangle',
                     'arrow-scale': 2,
                     'target-arrow-fill': 'filled'
@@ -1111,16 +1115,16 @@ def run_ast_security_analysis(n_clicks, elements):
                 'selector': 'node',
                 'style': {
                     'content': 'data(label)',
-                    'color': 'white',
+                    'color': COLORS['text'],
                     'text-wrap': 'wrap',
                     'text-valign': 'center',
                     'text-halign': 'center',
                     'shape': 'round-rectangle',  
                     'width': '100px',  
                     'height': '50px',  
-                    'background-color': '#018786',  
+                    'background-color': COLORS['primary'],  
                     'border-width': '2px',
-                    'border-color': '#333333',
+                    'border-color': COLORS['gray_dark'],
                     'border-radius': '5%',
                     'padding': '2px'
                 }
@@ -1128,10 +1132,10 @@ def run_ast_security_analysis(n_clicks, elements):
             {
                 'selector': 'edge',
                 'style': {
-                    'line-color': '#018786',  
+                    'line-color': COLORS['primary'],  
                     'width': 2,
                     'curve-style': 'bezier',  
-                    'target-arrow-color': '#018786',
+                    'target-arrow-color': COLORS['primary'],
                     'target-arrow-shape': 'triangle',
                     'arrow-scale': 2,
                     'target-arrow-fill': 'filled'
@@ -1152,22 +1156,25 @@ def run_ast_security_analysis(n_clicks, elements):
                     stylesheet.append({
                         'selector': f'node[line_number = {line_number}]',
                         'style': {
-                            'background-color': '#ff4444',  # Red background for vulnerable nodes
-                            'border-color': '#ff4444',
+                            'background-color': COLORS['error'],  # Red background for vulnerable nodes
+                            'border-color': COLORS['error'],
                             'border-width': '3px',
-                            'color': 'white'
+                            'color': COLORS['text']
                         }
                     })
             
             # Generate vulnerability report
             vuln_divs = [
                 html.Div([
-                    html.H4(f"Vulnerability at line {vuln.get('line_number')}", style={'color': '#018786'}),
+                    html.H4(f"Vulnerability at line {vuln.get('line_number')}", style={'color': COLORS['primary_text']}),
                     html.P(f"Type: {vuln.get('vulnerability_type')}", style={'fontWeight': 'bold'}),
-                    html.P(f"Severity: {vuln.get('severity', 'Unknown').upper()}", 
-                           style={'color': '#ff4444' if vuln.get('severity') == 'high' 
-                                         else '#FFC107' if vuln.get('severity') == 'medium'
-                                         else '#00C851'}),
+                    html.P([
+                        html.Span("Severity: ", style={'color': COLORS['primary_text']}),
+                        html.Span(f"{vuln.get('severity', 'Unknown').upper()}", 
+                               style={'color': COLORS['error'] if vuln.get('severity') == 'high' 
+                                             else COLORS['warning'] if vuln.get('severity') == 'medium'
+                                             else COLORS['success']})
+                    ]),
                     html.P(f"Description: {vuln.get('description')}"),
                     html.P(f"Code: ", style={'marginBottom': '5px'}),
                     html.Pre(vuln.get('code_snippet'), 
@@ -1178,10 +1185,8 @@ def run_ast_security_analysis(n_clicks, elements):
                 for vuln in vulnerabilities
             ]
             
-
-            
             result_message = [
-                html.H3(f"Security Analysis Results", style={'color': '#018786', 'marginBottom': '10px'}),
+                html.H3(f"Security Analysis Results", style={'color': COLORS['primary_text'], 'marginBottom': '10px'}),
                 html.P(f"Found {len(vulnerabilities)} potential vulnerabilities in {os.path.basename(current_ast_file)}", 
                       style={'fontWeight': 'bold'}),
                 html.Div(vuln_divs)
@@ -1194,16 +1199,16 @@ def run_ast_security_analysis(n_clicks, elements):
             stylesheet.append({
                 'selector': 'node',
                 'style': {
-                    'border-color': '#00C851',  # Green border for all nodes
+                    'border-color': COLORS['success'],  # Green border for all nodes
                     'border-width': '3px'
                 }
             })
             
             result_message = [
                 html.H4("✅ Security Analysis Complete", 
-                       style={'color': '#00C851', 'marginTop': '10px'}),
+                       style={'color': COLORS['success'], 'marginTop': '10px'}),
                 html.P("No security vulnerabilities were detected in this file.", 
-                      style={'color': '#00C851', 'fontWeight': 'bold'})
+                      style={'color': COLORS['success'], 'fontWeight': 'bold'})
             ]
         
         return stylesheet, result_message
@@ -1211,7 +1216,7 @@ def run_ast_security_analysis(n_clicks, elements):
     except Exception as e:
         print(f"AST security analysis error: {str(e)}")
         return no_update, html.Div(f"Error during security analysis: {str(e)}", 
-                                  style={'color': '#ff4444'})
+                                  style={'color': COLORS['error']})
 
 def main():
     initialize()

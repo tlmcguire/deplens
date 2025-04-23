@@ -24,6 +24,7 @@ import shutil
 from typing import Dict, List, Any
 from dash import no_update
 import logging
+import re
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -51,16 +52,26 @@ COLORS = {
 
 # Global variables
 initialized = False
-package = 'torch'
+package = 'flask'
 elements = []  # Default empty list
 vulnerable_files = set()
 package_bandit_results = {} 
 current_ast_file = None  # Add this to track the current file in AST view
 
+def extract_package_name(package_string):
+    """Extract base package name from a string that might include version constraints."""
+    # Match package name (stops at version specifiers or whitespace)
+    match = re.match(r'^([a-zA-Z0-9_\-\.]+)', package_string)
+    if match:
+        return match.group(1)
+    return package_string  # Return original if no match
+
 def is_package_installed(package_name):
     """Check if package is already installed."""
     try:
-        importlib.import_module(package_name)
+        # Extract base name for importlib
+        base_name = extract_package_name(package_name)
+        importlib.import_module(base_name)
         return True
     except ImportError:
         return False
@@ -77,14 +88,18 @@ def run_pipdeptree(package_name):
     """Generate dependency tree as PNG and JSON using pipdeptree."""
     output_dir = '/graphs'
     os.makedirs(output_dir, exist_ok=True)
-
-    png_file = os.path.join(output_dir, f"{package_name}_dependency_tree.png")
-    json_file = os.path.join(output_dir, f"{package_name}_dependency_tree.json")
+    
+    # Extract base name for file paths
+    base_name = extract_package_name(package_name)
+    
+    png_file = os.path.join(output_dir, f"{base_name}_dependency_tree.png")
+    json_file = os.path.join(output_dir, f"{base_name}_dependency_tree.json")
 
     try:
-        subprocess.run(['pipdeptree', '-p', package_name, '--graph-output', 'png'], 
+        # Use base name for pipdeptree
+        subprocess.run(['pipdeptree', '-p', base_name, '--graph-output', 'png'], 
                       stdout=open(png_file, 'wb'), check=True)
-        result = subprocess.run(['pipdeptree', '-p', package_name, '--json-tree'], 
+        result = subprocess.run(['pipdeptree', '-p', base_name, '--json-tree'], 
                               stdout=subprocess.PIPE, check=True)
         
         # Verify JSON output is valid
@@ -93,7 +108,7 @@ def run_pipdeptree(package_name):
             with open(json_file, 'w') as f:
                 json.dump(json_data, f, indent=4)
         except json.JSONDecodeError:
-            print(f"Invalid JSON output for {package_name}")
+            print(f"Invalid JSON output for {base_name}")
             return False
             
     except subprocess.CalledProcessError as e:
@@ -122,16 +137,21 @@ def parse_json_for_packages(json_file):
 
 def clean_package_directory(package_name):
     """Clean up package directory before extraction."""
-    package_path = f'/packages/{package_name}'
+    # Make sure we're using base name
+    base_name = extract_package_name(package_name)
+    package_path = f'/packages/{base_name}'
     try:
         if os.path.exists(package_path):
+            print(f"Removing existing directory: {package_path}")
             shutil.rmtree(package_path)
     except Exception as e:
-        print(f"Error cleaning directory for {package_name}: {e}")
+        print(f"Error cleaning directory for {base_name}: {e}")
 
 def get_json_filepath(package_name):
     """Get the filepath for a package's JSON dependency tree."""
-    return f"/graphs/{package_name}_dependency_tree.json"
+    # Extract base name for file paths
+    base_name = extract_package_name(package_name)
+    return f"/graphs/{base_name}_dependency_tree.json"
 
 def get_data(package_name):
     """Load or create the dependency tree data from a JSON file."""
@@ -167,13 +187,19 @@ def download_and_extract_packages(package_names, download_dir):
         for pkg in packages:
             try:
                 package_name = pkg['package_name']
-                print(f"Processing package: {package_name}")  
+                base_name = extract_package_name(package_name)
+                print(f"Processing package: {package_name} (base name: {base_name})")  
                 
-                response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+                # Use base name for PyPI API call
+                response = requests.get(f"https://pypi.org/pypi/{base_name}/json")
+                if response.status_code != 200:
+                    print(f"PyPI API error for {base_name}: {response.status_code}")
+                    continue
+                    
                 urls = response.json().get('urls', [])
                 
                 if not urls:
-                    print(f"No download URLs found for {package_name}")  
+                    print(f"No download URLs found for {base_name}")  
                     continue
 
                 for url in urls:
@@ -181,20 +207,22 @@ def download_and_extract_packages(package_names, download_dir):
                         tarball_url = url['url']
                         tarball_filename = os.path.basename(tarball_url)
                         tarball_path = os.path.join(download_dir, tarball_filename)
-                        package_dir = os.path.join(download_dir, package_name)
+                        package_dir = os.path.join(download_dir, base_name)  # Use base name for directory
 
                         # Add paths to package data
                         pkg['source_paths'] = {
                             'tarball_path': tarball_path,
                             'package_dir': package_dir
                         }
+                        
+                        print(f"Using package dir: {package_dir}")
 
                         with open(tarball_path, 'wb') as f:
                             response = requests.get(tarball_url)
                             f.write(response.content)
 
                         print(f"Cleaning directory: {package_dir}")  
-                        clean_package_directory(package_name)
+                        clean_package_directory(base_name)  # Use base name
                         
                         print(f"Extracting {tarball_filename}")  
                         with tarfile.open(tarball_path, 'r:gz') as tar:
@@ -205,6 +233,9 @@ def download_and_extract_packages(package_names, download_dir):
                         src_dir = os.path.join(download_dir, extracted_dir)
                         if os.path.exists(src_dir):
                             print(f"Renaming {src_dir} to {package_dir}")  
+                            # If target already exists, remove it first
+                            if os.path.exists(package_dir):
+                                shutil.rmtree(package_dir)
                             os.rename(src_dir, package_dir)
                         else:
                             print(f"Source directory not found: {src_dir}")  
@@ -216,7 +247,9 @@ def download_and_extract_packages(package_names, download_dir):
                     update_package_paths(pkg['dependencies'])
 
             except Exception as e:
-                print(f"Error processing {package_name}: {str(e)}") 
+                print(f"Error processing {package_name}: {str(e)}")
+                import traceback
+                traceback.print_exc()
 
     # Update paths and save
     update_package_paths(dependency_tree)
@@ -314,12 +347,15 @@ def initialize():
 
 def fetch_package_metadata(package_name):
     try:
-        package_key = package_name.lower()
-        response = requests.get(f"https://pypi.org/pypi/{package_name}/json")
+        # Extract base name for API calls
+        base_name = extract_package_name(package_name)
+        package_key = base_name.lower()
+        
+        response = requests.get(f"https://pypi.org/pypi/{base_name}/json")
         if response.status_code == 200:
             data = response.json()
             bandit_results = package_bandit_results.get(package_key, [])
-            logging.debug(f"Fetched metadata for {package_name} (key: {package_key}): "
+            logging.debug(f"Fetched metadata for {base_name} (key: {package_key}): "
                           f"{len(bandit_results)} Bandit issues found")
             return {
                 'name': data['info']['name'],
@@ -1195,7 +1231,7 @@ def run_ast_security_analysis(n_clicks, elements):
             result_message = [item for item in result_message if item is not None]
             
         else:
-            # No vulnerabilities found
+            # No vulnerabilities found  
             stylesheet.append({
                 'selector': 'node',
                 'style': {

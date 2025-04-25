@@ -740,11 +740,14 @@ app = Dash(
 initialize()  # Call once at startup
 
 app.layout = html.Div([
+    # ----- APP HEADER SECTION -----
     html.Div([
         html.H1("DepLens", style={'text-align': 'left', 'color': COLORS['text']}),
         html.Div(id='output-div', style={'padding': '2px', 'color': COLORS['text']})
     ], style={'background-color': COLORS['dark'], 'padding': '3px', 'width': '80%'}),
+    
     html.Div([
+        # ----- MAIN GRAPH VISUALIZATION AREA -----
         html.Div([
             cyto.Cytoscape(
                 id='cytoscape',
@@ -785,9 +788,12 @@ app.layout = html.Div([
                 ]
             )
         ], style={'width': '80%', 'display': 'inline-block', 'vertical-align': 'top'}),
+        
+        # ----- SIDEBAR PANEL -----
         html.Div([
             html.H3("Package Details", style={'color': COLORS['text']}),
             html.Div(id='package-details', style={'color': COLORS['text']}),
+            # ----- INFO TABS -----
             dcc.Tabs(
                 id='info-tabs',
                 value='details',
@@ -807,6 +813,7 @@ app.layout = html.Div([
                 ],
                 style={'background': COLORS['gray_light']}
             ),
+            # ----- CONTENT AREA FOR SELECTED TAB -----
             html.Div(
                 id='single-content-area',
                 style={'color': COLORS['text'], 'padding': '15px'}
@@ -815,16 +822,17 @@ app.layout = html.Div([
             'width': '22%',
             'display': 'inline-block',
             'vertical-align': 'top',
-            'background': COLORS['gray_light'],  # Changed from COLORS['dark']
+            'background': COLORS['gray_light'],
             'height': '92.3vh',
             'overflow-y': 'auto',
             'float': 'right',
             'position': 'absolute', 
-            'right': '0',           # Align to right edge
-            'top': '0'             # Align to top edge
+            'right': '0',
+            'top': '0'
         })
     ]),
-    # Modal for AST visualization
+    
+    # ----- AST VISUALIZATION MODAL -----
     html.Div([
         dbc.Modal(
             id='ast-modal',
@@ -840,8 +848,9 @@ app.layout = html.Div([
                     style={'border': 'none'}
                 ),
                 dbc.ModalBody([
-                    # Add security analysis button at the top of modal body
+                    # ----- SECURITY ANALYSIS SECTION IN MODAL -----
                     html.Div([
+                        # ----- LLM SECURITY ANALYSIS BUTTON -----
                         html.Button(
                             "Run LLM Security Analysis",
                             id='ast-security-btn',
@@ -854,17 +863,18 @@ app.layout = html.Div([
                                 'margin-bottom': '15px'
                             }
                         ),
-                        # Split into two divs - one for initial message, one for analysis results
+                        # ----- ANALYSIS RESULT CONTAINERS -----
                         html.Div(id='ast-initial-message', style={'color': COLORS['text'], 'margin': '10px 0'}),
                         html.Div(id='ast-analysis-result', style={'color': COLORS['text'], 'margin': '10px 0'})
                     ]),
+                    # ----- AST GRAPH VISUALIZATION -----
                     cyto.Cytoscape(
                         id='ast-graph',
                         layout={
                             'name': 'dagre',
                             'rankDir': 'TB',
                             'ranker': 'network-simplex', 
-                            'align': 'UL',  # Upper-left alignment
+                            'align': 'UL',
                             'rankSep': 40,
                             'nodeSep': 20,
                             'edgeSep': 20, 
@@ -902,20 +912,6 @@ app.layout = html.Div([
                                     'arrow-scale': 2,
                                     'target-arrow-fill': 'filled'
                                 }
-                            },
-                            {
-                                'selector': 'node.secure',
-                                'style': {
-                                    'border-color': COLORS['success'],  # Green border for secure nodes
-                                    'border-width': '3px'
-                                }
-                            },
-                            {
-                                'selector': 'node.vulnerable',
-                                'style': {
-                                    'border-color': COLORS['error'],  # Red border for vulnerable nodes
-                                    'border-width': '3px'
-                                }
                             }
                         ]
                     )
@@ -924,7 +920,8 @@ app.layout = html.Div([
             size='xl'  # Extra large modal size
         )
     ]),
-    # Button for security analysis
+    
+    # ----- BANDIT SECURITY ANALYSIS BUTTON -----
     html.Button(
         "Run Bandit Security Analysis",
         id='analyze-security-btn',
@@ -939,7 +936,7 @@ app.layout = html.Div([
     )
 ])
 
-# Callback to update package details
+# ----- CALLBACK: UPDATE PANEL CONTENT -----
 @app.callback(
     Output('single-content-area', 'children'),
     [Input('info-tabs', 'value'),
@@ -983,12 +980,13 @@ def update_panel_content(tab, node_data):
     elif tab == 'files':
         return get_file_structure(package_name)
 
+# ----- CALLBACK: DISPLAY AST MODAL -----
 @app.callback(
     Output('ast-modal', 'is_open'),
     Output('ast-graph', 'elements'),
     Output('ast-initial-message', 'children'),
     Output('ast-analysis-result', 'children'),
-    Output('ast-graph', 'stylesheet', allow_duplicate=True),  # Add stylesheet output with allow_duplicate
+    Output('ast-graph', 'stylesheet', allow_duplicate=True),
     Input({'type': 'python-file', 'path': ALL}, 'n_clicks'),
     State('ast-modal', 'is_open'),
     prevent_initial_call=True

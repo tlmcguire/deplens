@@ -77,7 +77,7 @@ print(f"Using langchain_ollama version: {ollama_version}")
 
 # Configure LLM settings from environment variables with defaults
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-PRIMARY_MODEL = os.environ.get("OLLAMA_PRIMARY_MODEL", "llama3.1:8b")
+PRIMARY_MODEL = os.environ.get("OLLAMA_PRIMARY_MODEL", "gemma3:4b")
 FALLBACK_MODEL = os.environ.get("OLLAMA_FALLBACK_MODEL", "gemma3:4b")
 MAX_RETRIES = int(os.environ.get("OLLAMA_MAX_RETRIES", "3"))
 RETRY_DELAY = int(os.environ.get("OLLAMA_RETRY_DELAY", "5"))

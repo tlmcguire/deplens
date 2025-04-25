@@ -52,11 +52,11 @@ COLORS = {
 
 # Global variables
 initialized = False
-package = 'flask'
+package = 'django=4.2.0'
 elements = []  # Default empty list
 vulnerable_files = set()
 package_bandit_results = {} 
-current_ast_file = None  # Add this to track the current file in AST view
+current_ast_file = None  # Tracks the current file in AST view
 
 def extract_package_name(package_string):
     """Extract base package name from a string that might include version constraints."""
@@ -65,6 +65,34 @@ def extract_package_name(package_string):
     if match:
         return match.group(1)
     return package_string  # Return original if no match
+
+def separate_package_and_version(package_string):
+    """
+    Separate a package string into its name and version constraint.
+    
+    Args:
+        package_string: String like 'package==1.0.0', 'package>=2.0', 'package=1.0', etc.
+        
+    Returns:
+        Tuple of (package_name, version_constraint) where version_constraint 
+        includes the operator (==, >=, etc.) or None if no version specified.
+    """
+    # First try standard format with operators (==, >=, etc.)
+    match = re.match(r'^([a-zA-Z0-9_\-\.]+)(?:([<>=~!]+.+))?$', package_string.strip())
+    if match:
+        package_name, version_constraint = match.groups()
+        if version_constraint:
+            return package_name, version_constraint
+            
+    # Try non-standard format with single equals
+    match = re.match(r'^([a-zA-Z0-9_\-\.]+)=([^=].+)$', package_string.strip())
+    if match:
+        package_name, version = match.groups()
+        # Convert to standard format
+        return package_name, f"=={version}"
+        
+    # Return default if no match
+    return package_string, None
 
 def is_package_installed(package_name):
     """Check if package is already installed."""
@@ -173,6 +201,10 @@ def download_and_extract_packages(package_names, download_dir):
     print(f"Creating download directory: {download_dir}")  
     os.makedirs(download_dir, exist_ok=True)
 
+    # Extract the original version from global package variable
+    original_name, original_version = separate_package_and_version(package)
+    print(f"Original package request: {package} (name: {original_name}, version: {original_version})")
+
     # Load main package JSON
     filepath = get_json_filepath(package)
     try:
@@ -187,11 +219,24 @@ def download_and_extract_packages(package_names, download_dir):
         for pkg in packages:
             try:
                 package_name = pkg['package_name']
-                base_name = extract_package_name(package_name)
-                print(f"Processing package: {package_name} (base name: {base_name})")  
+                base_name, version = separate_package_and_version(package_name)
                 
-                # Use base name for PyPI API call
-                response = requests.get(f"https://pypi.org/pypi/{base_name}/json")
+                # Apply original version to the main package if it matches
+                if base_name.lower() == original_name.lower() and original_version:
+                    version = original_version
+                    print(f"Applying original version constraint: {version} to {base_name}")
+                    
+                print(f"Processing package: {package_name} (base name: {base_name}, version: {version})")  
+                
+                # Use version if specified in the PyPI API call
+                if version:
+                    api_url = f"https://pypi.org/pypi/{base_name}/{version.lstrip('=<>~!')}/json"
+                else:
+                    api_url = f"https://pypi.org/pypi/{base_name}/json"
+                
+                print(f"PyPI API URL: {api_url}")  # Print the URL being used
+                
+                response = requests.get(api_url)
                 if response.status_code != 200:
                     print(f"PyPI API error for {base_name}: {response.status_code}")
                     continue
@@ -199,7 +244,7 @@ def download_and_extract_packages(package_names, download_dir):
                 urls = response.json().get('urls', [])
                 
                 if not urls:
-                    print(f"No download URLs found for {base_name}")  
+                    print(f"No download URLs found for {base_name} (version: {version})")  
                     continue
 
                 for url in urls:
@@ -321,11 +366,11 @@ def clear_results_directory():
     """
     results_dir = os.path.join(os.getcwd(), "results")
     if os.path.exists(results_dir):
-        print(f"Clearing results directory: {results_dir}")
         for file_name in os.listdir(results_dir):
             file_path = os.path.join(results_dir, file_name)
             if os.path.isfile(file_path):
                 os.remove(file_path)
+        pass
     else:
         os.makedirs(results_dir, exist_ok=True)
         print(f"Created results directory: {results_dir}")
@@ -347,11 +392,47 @@ def initialize():
 
 def fetch_package_metadata(package_name):
     try:
-        # Extract base name for API calls
-        base_name = extract_package_name(package_name)
+        # Get package name and version if specified
+        base_name, version = separate_package_and_version(package_name)
         package_key = base_name.lower()
         
-        response = requests.get(f"https://pypi.org/pypi/{base_name}/json")
+        # Check if this is the main package - use global version if available
+        original_name, original_version = separate_package_and_version(package)
+        if base_name.lower() == original_name.lower() and original_version:
+            version = original_version
+            # print(f"Using version constraint for metadata: {version}")
+        
+        # Also check dependency tree for more accurate version info
+        try:
+            filepath = get_json_filepath(package)
+            with open(filepath, "r") as f:
+                dependency_tree = json.load(f)[0]
+            
+            def find_version_in_tree(tree, target_name):
+                if tree['package_name'].lower() == target_name.lower():
+                    return tree.get('installed_version')
+                for dep in tree.get('dependencies', []):
+                    result = find_version_in_tree(dep, target_name)
+                    if result:
+                        return result
+                return None
+            
+            installed_version = find_version_in_tree(dependency_tree, base_name)
+            if installed_version and not version:
+                version = f"=={installed_version}"
+                print(f"Found version in dependency tree: {version}")
+        except Exception as e:
+            print(f"Error checking dependency tree: {str(e)}")
+        
+        # Build PyPI API URL (include version if specified)
+        if version:
+            api_url = f"https://pypi.org/pypi/{base_name}/{version.lstrip('=<>~!')}/json"
+        else:
+            api_url = f"https://pypi.org/pypi/{base_name}/json"
+            
+        print(f"PyPI API URL: {api_url}")  # Print the URL being used
+            
+        response = requests.get(api_url)
         if response.status_code == 200:
             data = response.json()
             bandit_results = package_bandit_results.get(package_key, [])
@@ -576,7 +657,6 @@ def generate_ast_graph(file_path: str) -> List[Dict[str, Any]]:
         if not elements:
             print(f"Warning: No AST elements generated for {file_path}")
             return []
-            
         return elements
         
     except Exception as e:
@@ -590,7 +670,6 @@ def run_bandit_analysis(package_dir: str, severity: str = 'HIGH', profile: str =
         
         # Only show high severity issues
         cmd.extend(['-lll'])  # Set minimum severity to high
-            
         cmd.append(package_dir)
         
         logging.debug(f"Running Bandit command: {' '.join(cmd)}")
@@ -605,7 +684,6 @@ def run_bandit_analysis(package_dir: str, severity: str = 'HIGH', profile: str =
         
         print(f"Bandit return code: {result.returncode}")
         print(f"Bandit stderr: {result.stderr}")
-        
         if result.returncode in [0, 1]:
             try:
                 if not result.stdout.strip():
@@ -623,7 +701,6 @@ def run_bandit_analysis(package_dir: str, severity: str = 'HIGH', profile: str =
         else:
             print(f"Bandit analysis failed with code {result.returncode}: {result.stderr}")
             return []
-            
     except Exception as e:
         print(f"Error running Bandit: {str(e)}")
         print(f"Package directory: {package_dir}")
@@ -641,7 +718,6 @@ def analyze_package_security(package_name: str, dependency_tree: Dict) -> Dict[s
     def analyze_tree(pkg_data):
         pkg_name = pkg_data.get('package_name', package_name).lower()
         pkg_dir = pkg_data.get('source_paths', {}).get('package_dir')
-        
         if pkg_dir and os.path.exists(pkg_dir):
             issues = run_bandit_analysis(pkg_dir)
             # Only mark as vulnerable if there are high severity issues
@@ -684,10 +760,10 @@ app.layout = html.Div([
                             'text-wrap': 'wrap',
                             'text-valign': 'center',
                             'text-halign': 'center',
-                            'shape': 'round-rectangle',  
-                            'width': '100px',  
-                            'height': '50px',  
-                            'background-color': COLORS['primary'],  
+                            'shape': 'round-rectangle',
+                            'width': '100px',
+                            'height': '50px',
+                            'background-color': COLORS['primary'],
                             'border-width': '2px',
                             'border-color': COLORS['gray_dark'],
                             'border-radius': '5%',
@@ -697,9 +773,9 @@ app.layout = html.Div([
                     {
                         'selector': 'edge',
                         'style': {
-                            'line-color': COLORS['primary'],  
+                            'line-color': COLORS['primary'],
                             'width': 2,
-                            'curve-style': 'bezier',  
+                            'curve-style': 'bezier',
                             'target-arrow-color': COLORS['primary'],
                             'target-arrow-shape': 'triangle',
                             'arrow-scale': 2,
@@ -761,7 +837,7 @@ app.layout = html.Div([
                 dbc.ModalHeader(
                     html.H3("AST Visualization", style={'color': COLORS['primary_text']}),
                     close_button=True,  
-                    style={'border': 'none'}  
+                    style={'border': 'none'}
                 ),
                 dbc.ModalBody([
                     # Add security analysis button at the top of modal body
@@ -789,11 +865,11 @@ app.layout = html.Div([
                             'rankDir': 'TB',
                             'ranker': 'network-simplex', 
                             'align': 'UL',  # Upper-left alignment
-                            'rankSep': 40,  
-                            'nodeSep': 20,  
+                            'rankSep': 40,
+                            'nodeSep': 20,
                             'edgeSep': 20, 
                             'acyclicer': 'greedy',
-                            'spacingFactor': 0.9  
+                            'spacingFactor': 0.9
                         },
                         style={'width': '100%', 'height': '80vh'},
                         stylesheet=[
@@ -805,10 +881,10 @@ app.layout = html.Div([
                                     'text-wrap': 'wrap',
                                     'text-valign': 'center',
                                     'text-halign': 'center',
-                                    'shape': 'round-rectangle',  
-                                    'width': '100px',  
-                                    'height': '50px',  
-                                    'background-color': COLORS['primary'],  
+                                    'shape': 'round-rectangle',
+                                    'width': '100px',
+                                    'height': '50px',
+                                    'background-color': COLORS['primary'],
                                     'border-width': '2px',
                                     'border-color': COLORS['gray_dark'],
                                     'border-radius': '5%',
@@ -818,9 +894,9 @@ app.layout = html.Div([
                             {
                                 'selector': 'edge',
                                 'style': {
-                                    'line-color': COLORS['primary'],  
+                                    'line-color': COLORS['primary'],
                                     'width': 2,
-                                    'curve-style': 'bezier',  
+                                    'curve-style': 'bezier',
                                     'target-arrow-color': COLORS['primary'],
                                     'target-arrow-shape': 'triangle',
                                     'arrow-scale': 2,
@@ -875,7 +951,6 @@ def update_panel_content(tab, node_data):
     
     package_name = node_data['id'].lower()
     logging.debug(f"Update panel for package: {package_name}")
-    
     if tab == 'details':
         metadata = fetch_package_metadata(package_name)
         if not metadata:
@@ -895,7 +970,6 @@ def update_panel_content(tab, node_data):
                 "No vulnerabilities detected.",
                 style={'color': COLORS['text'], 'marginTop': '10px'}
             )
-        
         return html.Div([
             html.H3(metadata['name'], style={'color': COLORS['primary_text']}),
             html.P(f"Version: {metadata['version']}", style={'color': COLORS['text']}),
@@ -904,9 +978,8 @@ def update_panel_content(tab, node_data):
             html.P("Description:", style={'color': COLORS['primary_text'], 'marginBottom': '5px'}),
             html.P(metadata['description'], style={'color': COLORS['text']}),
             html.P("Bandit Analysis:", style={'color': COLORS['primary_text'], 'marginBottom': '5px'}),
-            bandit_display, 
+            bandit_display,
         ])
-    
     elif tab == 'files':
         return get_file_structure(package_name)
 
@@ -923,7 +996,6 @@ def update_panel_content(tab, node_data):
 def toggle_ast_modal(file_clicks, is_open):
     """Toggle AST visualization modal and update graph elements."""
     global current_ast_file
-    
     ctx = callback_context
     if not ctx.triggered:
         return False, [], html.Div(), html.Div(), no_update
@@ -932,9 +1004,9 @@ def toggle_ast_modal(file_clicks, is_open):
     triggered_prop = ctx.triggered[0]['prop_id']
     if '.n_clicks' not in triggered_prop:
         return False, [], html.Div(), html.Div(), no_update
-        
+    
     # Extract only the component id part
-    component_id_str = triggered_prop.split('.n_clicks')[0]
+    component_id_str = triggered_prop.split('.n_clicks')[0]    
     
     # Try parsing as JSON; if that fails, fall back to ast.literal_eval
     try:
@@ -945,7 +1017,6 @@ def toggle_ast_modal(file_clicks, is_open):
         except Exception as e:
             print(f"Failed to parse component ID: {e}")
             return False, [], html.Div(), html.Div(), no_update
-    
     file_path = id_dict.get('path')
     if not file_path:
         print("No file path found in component ID")
@@ -971,10 +1042,10 @@ def toggle_ast_modal(file_clicks, is_open):
                 'text-wrap': 'wrap',
                 'text-valign': 'center',
                 'text-halign': 'center',
-                'shape': 'round-rectangle',  
-                'width': '100px',  
-                'height': '50px',  
-                'background-color': COLORS['primary'],  
+                'shape': 'round-rectangle',
+                'width': '100px',
+                'height': '50px',
+                'background-color': COLORS['primary'],
                 'border-width': '2px',
                 'border-color': COLORS['gray_dark'],
                 'border-radius': '5%',
@@ -984,9 +1055,9 @@ def toggle_ast_modal(file_clicks, is_open):
         {
             'selector': 'edge',
             'style': {
-                'line-color': COLORS['primary'],  
+                'line-color': COLORS['primary'],
                 'width': 2,
-                'curve-style': 'bezier',  
+                'curve-style': 'bezier',
                 'target-arrow-color': COLORS['primary'],
                 'target-arrow-shape': 'triangle',
                 'arrow-scale': 2,
@@ -1014,12 +1085,11 @@ def toggle_ast_modal(file_clicks, is_open):
 def run_security_analysis(n_clicks, current_elements):
     if not n_clicks:
         return no_update, no_update, no_update, "Run Bandit Security Analysis"
-     
     try:
         # Load dependency tree
         with open(get_json_filepath(package)) as f:
             dependency_tree = json.load(f)[0]
-            
+        
         # Run security analysis
         security_status = analyze_package_security(package, dependency_tree)
         
@@ -1077,15 +1147,14 @@ def run_security_analysis(n_clicks, current_elements):
             if 'source' not in elem['data']:
                 pkg_name = elem['data']['id'].lower()
                 if pkg_name in security_status:
-                    new_elem['data']['security'] = security_status[pkg_name]
+                    new_elem['data']['security'] = security_status[pkg_name].lower()
             updated_elements.append(new_elem)
         
         vulnerable_count = list(security_status.values()).count('vulnerable')
         output_message = f"Security analysis complete. Found {vulnerable_count} insecure packages."
         
-        # Return final results and update button text back to its original label.
+        # Return final results and update button text back to its original label
         return stylesheet, updated_elements, output_message, "Run Bandit Security Analysis"
-        
     except Exception as e:
         print(f"Security analysis error: {str(e)}")
         return no_update, no_update, f"Error during security analysis: {str(e)}", "Run Bandit Security Analysis"
@@ -1101,10 +1170,8 @@ def run_security_analysis(n_clicks, current_elements):
 def run_ast_security_analysis(n_clicks, elements):
     """Run LLM security analysis on the currently loaded AST."""
     global current_ast_file
-    
     if not n_clicks or not current_ast_file:
         return no_update, no_update
-    
     try:
         # Create results directory if it doesn't exist
         os.makedirs('results', exist_ok=True)
@@ -1116,7 +1183,7 @@ def run_ast_security_analysis(n_clicks, elements):
         # ALWAYS generate a fresh analysis for the current file
         print(f"Running LLM security analysis on {current_ast_file}")
         try:
-            # First delete any existing analysis to ensure fresh scan
+            # First delete any existing analysis to ensure fresh scans
             if os.path.exists(results_path):
                 os.remove(results_path)
                 print(f"Removed previous analysis file to ensure fresh scan")
@@ -1155,10 +1222,10 @@ def run_ast_security_analysis(n_clicks, elements):
                     'text-wrap': 'wrap',
                     'text-valign': 'center',
                     'text-halign': 'center',
-                    'shape': 'round-rectangle',  
-                    'width': '100px',  
-                    'height': '50px',  
-                    'background-color': COLORS['primary'],  
+                    'shape': 'round-rectangle',
+                    'width': '100px',
+                    'height': '50px',
+                    'background-color': COLORS['primary'],
                     'border-width': '2px',
                     'border-color': COLORS['gray_dark'],
                     'border-radius': '5%',
@@ -1168,9 +1235,9 @@ def run_ast_security_analysis(n_clicks, elements):
             {
                 'selector': 'edge',
                 'style': {
-                    'line-color': COLORS['primary'],  
+                    'line-color': COLORS['primary'],
                     'width': 2,
-                    'curve-style': 'bezier',  
+                    'curve-style': 'bezier',
                     'target-arrow-color': COLORS['primary'],
                     'target-arrow-shape': 'triangle',
                     'arrow-scale': 2,
@@ -1182,7 +1249,6 @@ def run_ast_security_analysis(n_clicks, elements):
         # Create analysis report
         vulnerabilities = security_data.get('vulnerabilities', [])
         is_vulnerable = security_data.get('vulnerable', False)
-        
         # Update node styles for vulnerable nodes
         if is_vulnerable and vulnerabilities:
             # Add style for vulnerable nodes
@@ -1220,7 +1286,6 @@ def run_ast_security_analysis(n_clicks, elements):
                 ])
                 for vuln in vulnerabilities
             ]
-            
             result_message = [
                 html.H3(f"Security Analysis Results", style={'color': COLORS['primary_text'], 'marginBottom': '10px'}),
                 html.P(f"Found {len(vulnerabilities)} potential vulnerabilities in {os.path.basename(current_ast_file)}", 
@@ -1229,7 +1294,6 @@ def run_ast_security_analysis(n_clicks, elements):
             ]
             # Filter None values
             result_message = [item for item in result_message if item is not None]
-            
         else:
             # No vulnerabilities found  
             stylesheet.append({
@@ -1246,7 +1310,6 @@ def run_ast_security_analysis(n_clicks, elements):
                 html.P("No security vulnerabilities were detected in this file.", 
                       style={'color': COLORS['success'], 'fontWeight': 'bold'})
             ]
-        
         return stylesheet, result_message
         
     except Exception as e:

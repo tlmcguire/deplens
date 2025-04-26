@@ -51,7 +51,7 @@ Analyze this Python code for security vulnerabilities:
 ```
 
 
-Return your analyis as a JSON dictionary with the following structure:
+Return your analysis as a JSON dictionary with the following structure:
 ```json
 {{
   "vulnerable": true/false,

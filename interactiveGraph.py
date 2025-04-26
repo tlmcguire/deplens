@@ -25,6 +25,7 @@ from typing import Dict, List, Any
 from dash import no_update
 import logging
 import re
+import argparse
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -57,6 +58,14 @@ elements = []  # Default empty list
 vulnerable_files = set()
 package_bandit_results = {} 
 current_ast_file = None  # Tracks the current file in AST view
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Interactive dependency graph visualization.')
+    parser.add_argument('--skip-download', action='store_true',
+                        help='Skip downloading and extracting packages (use existing files)')
+    parser.add_argument('package', nargs='?', default='django=4.2.0',
+                        help='Package name with optional version (e.g., django=4.2.0)')
+    return parser.parse_args()
 
 def extract_package_name(package_string):
     """Extract base package name from a string that might include version constraints."""
@@ -377,14 +386,22 @@ def clear_results_directory():
 
 def initialize():
     """Initialize the environment once."""
-    global initialized
+    global initialized, package
     if initialized:
         return
+    
+    # Parse arguments
+    args = parse_arguments()
+    
+    # Update package if specified in arguments
+    if args.package:
+        package = args.package
     
     # Clear results directory at startup
     clear_results_directory()
     
-    if not os.path.exists('/packages'):
+    # Skip download if requested
+    if not args.skip_download and not os.path.exists('/packages'):
         download_and_extract_packages(set([package]), '/packages')
     
     initialize_data()
@@ -1317,7 +1334,7 @@ def run_ast_security_analysis(n_clicks, elements):
 
 def main():
     initialize()
-    app.run(host='0.0.0.0', port=8080, debug=True)  # Changed from app.run_server to app.run
+    app.run(host='0.0.0.0', port=8080, debug=True)
 
 if __name__ == '__main__':
     main()

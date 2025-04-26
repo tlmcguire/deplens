@@ -44,6 +44,15 @@ def append_line_numbers(analyzed_json, source_code_path):
 template = """<system>You are a security vulnerability analyzer for Python code.</system>
 
 <user>
+Examples of security vulnerabilities include:
+- Unsafe use of untrusted input (e.g., from `request.args`, `request.form`, environment variables, external files)
+- Dangerous function calls (e.g., `eval`, `exec`, `os.system`, `subprocess.run`, `pickle.loads`, `yaml.load`)
+- Insecure file handling (e.g., `open` or `send_file` with user-controlled paths)
+- Cryptographic mistakes (e.g., hardcoded keys, insecure algorithms)
+- Web-specific issues (e.g., Cross-Site Scripting (XSS), CSRF vulnerabilities, Open Redirects)
+- Hardcoded secrets (e.g., API keys, passwords, tokens)
+- Misconfigurations (e.g., exposing debug mode, bad CORS policies)
+
 Analyze this Python code for security vulnerabilities:
 
 ```python
@@ -77,7 +86,7 @@ print(f"Using langchain_ollama version: {ollama_version}")
 
 # Configure LLM settings from environment variables with defaults
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-PRIMARY_MODEL = os.environ.get("OLLAMA_PRIMARY_MODEL", "gemma3:4b")
+PRIMARY_MODEL = os.environ.get("OLLAMA_PRIMARY_MODEL", "llama3.1:8b")
 FALLBACK_MODEL = os.environ.get("OLLAMA_FALLBACK_MODEL", "gemma3:4b")
 MAX_RETRIES = int(os.environ.get("OLLAMA_MAX_RETRIES", "3"))
 RETRY_DELAY = int(os.environ.get("OLLAMA_RETRY_DELAY", "5"))

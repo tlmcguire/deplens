@@ -1,9 +1,9 @@
 # Image 
 FROM python:3.11-slim
 
-# Install system dependencies including graphviz
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    graphviz \
+    nano \
     && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the container

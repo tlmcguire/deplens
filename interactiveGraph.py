@@ -4,7 +4,12 @@ Analyzes Python package dependencies and displays them in an interactive web int
 
 Build: docker build -t deplens .
 In a separate terminal, run: ollama serve
-Run: docker run --rm -it -p 8080:8080 --add-host=host.docker.internal:host-gateway -v "$(pwd)/graphs:/graphs" -v "$(pwd)/models:/models" -v "$(pwd)/results:/app/results" deplens
+Run: docker run --rm -it -p 8080:8080 --add-host=host.docker.internal:host-gateway \
+  -v "$(pwd)/graphs:/graphs" \
+  -v "$(pwd)/models:/models" \
+  -v "$(pwd)/results:/app/results" \
+  --entrypoint python \
+  deplens interactiveGraph.py <package>
 
 """
 
@@ -53,7 +58,7 @@ COLORS = {
 
 # Global variables
 initialized = False
-package = 'django=4.2.0'
+package = 'Flask'
 elements = []  # Default empty list
 vulnerable_files = set()
 package_bandit_results = {} 
@@ -63,7 +68,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Interactive dependency graph visualization.')
     parser.add_argument('--skip-download', action='store_true',
                         help='Skip downloading and extracting packages (use existing files)')
-    parser.add_argument('package', nargs='?', default='django=4.2.0',
+    parser.add_argument('package', nargs='?', default='Django',
                         help='Package name with optional version (e.g., django=4.2.0)')
     return parser.parse_args()
 

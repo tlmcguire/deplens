@@ -1,8 +1,9 @@
 # Image 
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies including graphviz and nano
 RUN apt-get update && apt-get install -y \
+    graphviz \
     nano \
     && rm -rf /var/lib/apt/lists/*
 

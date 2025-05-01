@@ -5,27 +5,27 @@ This allows you to install packages, modify them, and then analyze them with int
 
 Usage: python setup_package.py package_name[==version]
 Example: python setup_package.py django==4.2.0
-"""
 
-# ==============================================================================
-# Workflow for Package Testing and Vulnerability Analysis
-# ==============================================================================
-# 1. Start Docker container in interactive mode:
-#    docker run --rm -it -p 8080:8080 --add-host=host.docker.internal:host-gateway \
-#      -v "$(pwd)/graphs:/graphs" -v "$(pwd)/models:/models" \
-#      -v "$(pwd)/results:/app/results" deplens /bin/bash
-#
-# 2. Download and extract a package (this script):
-#    python setupPackage.py <package_name>==<version>
-#
-# 3. Modify the package source code as needed
-#
-# 4. Run analysis with interactiveGraph.py:
-#    python interactiveGraph.py --skip-download <package_name>==<version>
-#
-# 5. Access the dashboard:
-#    http://localhost:8080
-# ==============================================================================
+==============================================================================
+Workflow for Package Testing and Vulnerability Analysis
+==============================================================================
+1. Start Docker container in interactive mode:
+   docker run --rm -it -p 8080:8080 --add-host=host.docker.internal:host-gateway \
+     -v "$(pwd)/graphs:/graphs" -v "$(pwd)/models:/models" \
+     -v "$(pwd)/results:/app/results" deplens /bin/bash
+
+2. Download and extract a package (this script):
+   python setupPackage.py <package_name>==<version>
+
+3. Modify the package source code as needed
+
+4. Run analysis with interactiveGraph.py:
+   python interactiveGraph.py --skip-download <package_name>==<version>
+
+5. Access the dashboard:
+   http://localhost:8080
+==============================================================================
+"""
 
 import sys
 import os

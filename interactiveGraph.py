@@ -31,6 +31,9 @@ from dash import no_update
 import logging
 import re
 import argparse
+from dash.exceptions import PreventUpdate
+import base64
+import datetime
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -872,19 +875,59 @@ app.layout = html.Div([
                 dbc.ModalBody([
                     # ----- SECURITY ANALYSIS SECTION IN MODAL -----
                     html.Div([
-                        # ----- LLM SECURITY ANALYSIS BUTTON -----
-                        html.Button(
-                            "Run LLM Security Analysis",
-                            id='ast-security-btn',
-                            style={
-                                'background-color': COLORS['primary'],
-                                'color': COLORS['text'],
-                                'border': 'none',
-                                'padding': '10px 20px',
-                                'cursor': 'pointer',
-                                'margin-bottom': '15px'
-                            }
-                        ),
+                        # ----- BUTTON ROW WITH LLM ANALYSIS AND EXPORT OPTIONS -----
+                        html.Div([
+                            # ----- LLM SECURITY ANALYSIS BUTTON -----
+                            html.Button(
+                                "Run LLM Security Analysis",
+                                id='ast-security-btn',
+                                style={
+                                    'background-color': COLORS['primary'],
+                                    'color': COLORS['text'],
+                                    'border': 'none',
+                                    'padding': '10px 20px',
+                                    'cursor': 'pointer',
+                                    'margin-right': '15px'
+                                }
+                            ),
+                            # ----- EXPORT LABEL AND BUTTONS -----
+                            html.Label("Export AST:", style={'margin-right': '10px', 'color': COLORS['text']}),
+                            html.Button(
+                                "PNG",
+                                id='btn-export-png',
+                                style={
+                                    'background-color': COLORS['primary'],
+                                    'color': COLORS['text'],
+                                    'border': 'none',
+                                    'padding': '5px 10px',
+                                    'cursor': 'pointer',
+                                    'margin-right': '5px'
+                                }
+                            ),
+                            html.Button(
+                                "JPG",
+                                id='btn-export-jpg',
+                                style={
+                                    'background-color': COLORS['primary'],
+                                    'color': COLORS['text'],
+                                    'border': 'none',
+                                    'padding': '5px 10px',
+                                    'cursor': 'pointer',
+                                    'margin-right': '5px'
+                                }
+                            ),
+                            html.Button(
+                                "SVG",
+                                id='btn-export-svg',
+                                style={
+                                    'background-color': COLORS['primary'],
+                                    'color': COLORS['text'],
+                                    'border': 'none',
+                                    'padding': '5px 10px',
+                                    'cursor': 'pointer'
+                                }
+                            ),
+                        ], style={'display': 'flex', 'align-items': 'center', 'margin-bottom': '15px'}),
                         # ----- ANALYSIS RESULT CONTAINERS -----
                         html.Div(id='ast-initial-message', style={'color': COLORS['text'], 'margin': '10px 0'}),
                         html.Div(id='ast-analysis-result', style={'color': COLORS['text'], 'margin': '10px 0'})
@@ -1336,6 +1379,46 @@ def run_ast_security_analysis(n_clicks, elements):
         print(f"AST security analysis error: {str(e)}")
         return no_update, html.Div(f"Error during security analysis: {str(e)}", 
                                   style={'color': COLORS['error']})
+
+# Export AST as PNG, JPG, or SVG
+@app.callback(
+    Output("ast-graph", "generateImage"),
+    [Input("btn-export-png", "n_clicks"),
+     Input("btn-export-jpg", "n_clicks"),
+     Input("btn-export-svg", "n_clicks")],
+    prevent_initial_call=True
+)
+def export_ast_image(png_clicks, jpg_clicks, svg_clicks):
+    """Handle AST visualization export as image files."""
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    button_id = ctx.triggered[0]["prop_id"].split(".")[0]
+    
+    if button_id == "btn-export-png":
+        print("Exporting AST as PNG")
+        return {
+            'type': 'png',
+            'action': 'download',
+            'filename': f'ast_visualization_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}'
+        }
+    elif button_id == "btn-export-jpg":
+        print("Exporting AST as JPG")
+        return {
+            'type': 'jpeg',
+            'action': 'download',
+            'filename': f'ast_visualization_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}'
+        }
+    elif button_id == "btn-export-svg":
+        print("Exporting AST as SVG")
+        return {
+            'type': 'svg',
+            'action': 'download',
+            'filename': f'ast_visualization_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}'
+        }
+    else:
+        raise PreventUpdate
 
 def main():
     initialize()

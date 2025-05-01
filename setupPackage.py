@@ -11,8 +11,11 @@ Workflow for Package Testing and Vulnerability Analysis
 ==============================================================================
 1. Start Docker container in interactive mode:
    docker run --rm -it -p 8080:8080 --add-host=host.docker.internal:host-gateway \
-     -v "$(pwd)/graphs:/graphs" -v "$(pwd)/models:/models" \
-     -v "$(pwd)/results:/app/results" deplens /bin/bash
+  -v "$(pwd)/graphs:/graphs" \
+  -v "$(pwd)/models:/models" \
+  -v "$(pwd)/results:/app/results" \
+  --entrypoint /bin/bash \
+  deplens
 
 2. Download and extract a package (this script):
    python setupPackage.py <package_name>==<version>

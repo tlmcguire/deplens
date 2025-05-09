@@ -7,20 +7,14 @@ DepLens is a containerized Python tool designed to assist in analyzing dependenc
 - **Interactive Dependency Visualization**: View package dependencies as an interactive graph
 - **Security Analysis**: Scan packages for security vulnerabilities using Bandit
 - **LLM-Based Security Scanning**: Analyze Python code for vulnerabilities using LLM models
-- **AST Visualization**: Explore Abstract Syntax Trees for Python files
+- **AST Visualization**: Explore Abstract Syntax Trees for Python files with export options (PNG, JPG, SVG)
 - **File Browsing**: Navigate through package source code
-
-## System Requirements
-
-### Hardware Requirements
-- Minimum 4GB RAM (8GB recommended for larger packages)
-- At least 10GB free disk space
-- Any modern CPU with 2+ cores
+- **Package Testing Tools**: Download, modify, and analyze packages for security testing
 
 ### Software Requirements
 - **Docker**: Version 20.10 or newer
-- **Ollama**: Version 0.1.14 or newer
-- A modern web browser (Chrome, Firefox, Safari, or Edge)
+- **Ollama**: Version 0.1.14 or newer 
+- A modern web browser (Firefox, Safari, Chrome)
 - Internet connection for initial setup and package downloads
 
 ## Installation
@@ -55,7 +49,8 @@ DepLens is a containerized Python tool designed to assist in analyzing dependenc
    ```bash
    ollama serve
    ```
-   The first time you run DepLens, it will automatically download the required LLM model (about 4GB).
+   
+   DepLens requires LLM models to perform LLM-based security analysis.
 
 4. **Run DepLens**:
    ```bash
@@ -63,8 +58,10 @@ DepLens is a containerized Python tool designed to assist in analyzing dependenc
      -v "$(pwd)/graphs:/graphs" \
      -v "$(pwd)/models:/models" \
      -v "$(pwd)/results:/app/results" \
-     deplens
+     deplens [package_name]
    ```
+   - Optionally specify a package name (defaults to Django if not provided)
+   - Use `--skip-download` flag to skip downloading packages (use existing files)
 
 5. Open your browser and navigate to `http://localhost:8080`
 
@@ -84,12 +81,39 @@ DepLens is a containerized Python tool designed to assist in analyzing dependenc
 - Navigate through package files in the "Files" tab
 - Click on Python files to view their AST (Abstract Syntax Tree)
 - In the AST view, click "Run LLM Security Analysis" to detect code vulnerabilities
+- Export AST visualizations as PNG, JPG, or SVG for documentation
 
 ### LLM Security Scanning
 The tool uses Ollama to analyze Python code for security issues:
 - Opens an AST visualization of selected files
 - Identifies vulnerable lines of code and highlights them
 - Provides detailed vulnerability reports with remediation suggestions
+
+### Package Testing Workflow
+
+For testing specific package versions or modifying code before analysis:
+
+1. **Start Docker container in interactive mode**:
+   ```bash
+   docker run --rm -it -p 8080:8080 --add-host=host.docker.internal:host-gateway \
+     -v "$(pwd)/graphs:/graphs" \
+     -v "$(pwd)/models:/models" \
+     -v "$(pwd)/results:/app/results" \
+     --entrypoint /bin/bash \
+     deplens
+   ```
+
+2. **Download and extract a package**:
+   ```bash
+   python setupPackage.py <package_name>==<version>
+   ```
+
+3. **Modify the package source code as needed**
+
+4. **Run analysis with modified code**:
+   ```bash
+   python interactiveGraph.py --skip-download <package_name>==<version>
+   ```
 
 ## Troubleshooting
 
@@ -108,3 +132,8 @@ The tool uses Ollama to analyze Python code for security issues:
    - Large packages can take significant time to analyze
    - Consider using a more powerful machine for extensive package analysis
    - Check if your disk I/O is a bottleneck
+
+4. **LLM analysis fails**:
+   - Verify Ollama has downloaded the required models
+   - The tool will attempt to use a fallback model if the primary model fails
+   - Check system memory

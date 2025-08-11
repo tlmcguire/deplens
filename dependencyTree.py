@@ -1,5 +1,5 @@
-# docker build -t deplens .
-# docker run --rm -it -v "$(pwd)/graphs:/graphs" deplens
+# podman build -t deplens .
+# podman run --rm -it -v "$(pwd)/graphs:/graphs" deplens
 
 import subprocess
 import sys

@@ -2,9 +2,9 @@
 Interactive dependency graph visualization using Dash and Cytoscape.
 Analyzes Python package dependencies and displays them in an interactive web interface.
 
-Build: docker build -t deplens .
+Build: podman build -t deplens .
 In a separate terminal, run: ollama serve
-Run: docker run --rm -it -p 8080:8080 --add-host=host.docker.internal:host-gateway \
+Run: podman run --rm -it -p 8080:8080 --add-host=host.containers.internal:host-gateway \
   -v "$(pwd)/graphs:/graphs" \
   -v "$(pwd)/models:/models" \
   -v "$(pwd)/results:/app/results" \

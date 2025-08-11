@@ -53,13 +53,38 @@ DepLens is a containerized Python tool designed to assist in analyzing dependenc
    DepLens requires LLM models to perform LLM-based security analysis.
 
 4. **Run DepLens**:
+   
+   **Option 1: Use --network=host (Recommended for Linux)**:
    ```bash
-   podman run --rm -it -p 8080:8080 --add-host=host.containers.internal:host-gateway \
+   podman run --rm -it -p 8080:8080 --network=host \
      -v "$(pwd)/graphs:/graphs" \
      -v "$(pwd)/models:/models" \
      -v "$(pwd)/results:/app/results" \
-     deplens [package_name]
+     --entrypoint python \
+     deplens interactiveGraph.py [package_name]
    ```
+
+   **Option 2: Use localhost connection (Works on macOS/Linux)**:
+   ```bash
+   podman run --rm -it -p 8080:8080 \
+     -v "$(pwd)/graphs:/graphs" \
+     -v "$(pwd)/models:/models" \
+     -v "$(pwd)/results:/app/results" \
+     --entrypoint python \
+     deplens interactiveGraph.py [package_name]
+   ```
+
+   **Option 3: Set the Ollama URL explicitly (Recommended for macOS)**:
+   ```bash
+   podman run --rm -it -p 8080:8080 \
+     -e OLLAMA_BASE_URL="http://localhost:11434" \
+     -v "$(pwd)/graphs:/graphs" \
+     -v "$(pwd)/models:/models" \
+     -v "$(pwd)/results:/app/results" \
+     --entrypoint python \
+     deplens interactiveGraph.py [package_name]
+   ```
+   
    - Optionally specify a package name (defaults to Django if not provided)
    - Use `--skip-download` flag to skip downloading packages (use existing files)
 
@@ -95,7 +120,8 @@ For testing specific package versions or modifying code before analysis:
 
 1. **Start Podman container in interactive mode**:
    ```bash
-   podman run --rm -it -p 8080:8080 --add-host=host.containers.internal:host-gateway \
+   podman run --rm -it -p 8080:8080 \
+     -e OLLAMA_BASE_URL="http://localhost:11434" \
      -v "$(pwd)/graphs:/graphs" \
      -v "$(pwd)/models:/models" \
      -v "$(pwd)/results:/app/results" \
@@ -121,7 +147,8 @@ For testing specific package versions or modifying code before analysis:
 
 1. **Cannot connect to Ollama**:
    - Make sure Ollama is running (`ollama serve` in a separate terminal)
-   - Check if the host.containers.internal mapping is correct for your system
+   - Try Option 3 (explicit OLLAMA_BASE_URL) if other connection methods fail
+   - On macOS, use `OLLAMA_BASE_URL="http://localhost:11434"` environment variable
    - Verify firewall settings allow communication on port 11434
 
 2. **Web interface not loading**:

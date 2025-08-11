@@ -51,8 +51,8 @@ COLORS = {
     'primary_text': '#00CDCD', # Brighter teal for headings and important text
     'text': '#ffffff',         # White - text color on dark backgrounds
     'success': '#00C851',      # Green - for secure/success indications
-    'warning': '#ffbb33',      # Yellow - for warnings/medium severity
-    'error': '#ff4444',        # Red - for errors/insecure/high severity
+    'warning': '#ffbb33',      # Yellow - for warnings
+    'error': '#ff4444',        # Red - for errors/insecure indications
     'dark': '#222222',         # Dark background
     'gray_dark': '#333333',    # Dark gray for borders
     'gray_light': '#444444',   # Light gray for sidebar
@@ -1333,13 +1333,6 @@ def run_ast_security_analysis(n_clicks, elements):
                 html.Div([
                     html.H4(f"Vulnerability at line {vuln.get('line_number')}", style={'color': COLORS['primary_text']}),
                     html.P(f"Type: {vuln.get('vulnerability_type')}", style={'fontWeight': 'bold'}),
-                    html.P([
-                        html.Span("Severity: ", style={'color': COLORS['primary_text']}),
-                        html.Span(f"{vuln.get('severity', 'Unknown').upper()}", 
-                               style={'color': COLORS['error'] if vuln.get('severity') == 'high' 
-                                             else COLORS['warning'] if vuln.get('severity') == 'medium'
-                                             else COLORS['success'] if vuln.get('severity') == 'low' else COLORS['error']})
-                    ]),
                     html.P(f"Description: {vuln.get('description')}"),
                     html.P(f"Code: ", style={'marginBottom': '5px'}),
                     html.Pre(vuln.get('code_snippet'), 

@@ -71,7 +71,6 @@ Return your analysis as a JSON dictionary with the following structure:
       "code_snippet": "vulnerable code here",
       "vulnerability_type": "type of vulnerability",
       "description": "detailed explanation",
-      "severity": "high/medium/low",
       "remediation": "how to fix it"
     }}
   ]

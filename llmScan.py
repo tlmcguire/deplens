@@ -84,7 +84,13 @@ from langchain_ollama import __version__ as ollama_version
 print(f"Using langchain_ollama version: {ollama_version}")
 
 # Configure LLM settings from environment variables with defaults
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://host.containers.internal:11434")
+# Try multiple URLs for Ollama connection
+OLLAMA_URLS = [
+    os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),  # Default to localhost
+    "http://host.containers.internal:11434",  # Docker fallback
+    "http://127.0.0.1:11434",  # Local fallback
+    "http://0.0.0.0:11434"     # Alternative fallback
+]
 PRIMARY_MODEL = os.environ.get("OLLAMA_PRIMARY_MODEL", "llama3.1:8b")
 FALLBACK_MODEL = os.environ.get("OLLAMA_FALLBACK_MODEL", "gemma3:4b")
 MAX_RETRIES = int(os.environ.get("OLLAMA_MAX_RETRIES", "3"))
@@ -93,28 +99,33 @@ RETRY_DELAY = int(os.environ.get("OLLAMA_RETRY_DELAY", "5"))
 def initialize_llm(model_name=None):
     """Initialize the LLM with retries and proper error handling"""
     model_name = model_name or PRIMARY_MODEL
-    retries = 0
     
-    while retries < MAX_RETRIES:
-        try:
-            print(f"Attempting to initialize LLM with model {model_name}...")
-            model = OllamaLLM(
-                model=model_name,
-                temperature=0,
-                base_url=OLLAMA_BASE_URL
-            )
-            # Test the model with a simple request to verify connection
-            _ = model.invoke("Test connection")
-            print(f"Successfully initialized model: {model_name}")
-            return model
-        except Exception as e:
-            retries += 1
-            print(f"Attempt {retries}/{MAX_RETRIES} failed: {str(e)}")
-            if retries < MAX_RETRIES:
-                print(f"Retrying in {RETRY_DELAY} seconds...")
-                time.sleep(RETRY_DELAY)
+    # Try each URL until one works
+    for base_url in OLLAMA_URLS:
+        retries = 0
+        while retries < MAX_RETRIES:
+            try:
+                print(f"Attempting to initialize LLM with model {model_name} at {base_url}...")
+                model = OllamaLLM(
+                    model=model_name,
+                    temperature=0,
+                    base_url=base_url
+                )
+                # Test the model with a simple request to verify connection
+                _ = model.invoke("Test connection")
+                print(f"Successfully initialized model: {model_name} at {base_url}")
+                return model
+            except Exception as e:
+                retries += 1
+                print(f"Attempt {retries}/{MAX_RETRIES} failed for {base_url}: {str(e)}")
+                if retries < MAX_RETRIES:
+                    print(f"Retrying in {RETRY_DELAY} seconds...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    print(f"Failed to connect to {base_url} after {MAX_RETRIES} attempts")
+                    break  # Try next URL
     
-    raise RuntimeError(f"Failed to initialize LLM after {MAX_RETRIES} attempts")
+    raise RuntimeError(f"Failed to initialize LLM with any available URL after {MAX_RETRIES} attempts each")
 
 # Try to initialize with primary model, fall back to alternative if needed
 try:

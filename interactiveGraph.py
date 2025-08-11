@@ -4,7 +4,15 @@ Analyzes Python package dependencies and displays them in an interactive web int
 
 Build: podman build -t deplens .
 In a separate terminal, run: ollama serve
-Run: podman run --rm -it -p 8080:8080 --add-host=host.containers.internal:host-gateway \
+Run: podman run --rm -it -p 8080:8080 --network=host \
+  -v "$(pwd)/graphs:/graphs" \
+  -v "$(pwd)/models:/models" \
+  -v "$(pwd)/results:/app/results" \
+  --entrypoint python \
+  deplens interactiveGraph.py <package>
+
+Alternative for macOS (if --network=host doesn't work):
+Run: podman run --rm -it -p 8080:8080 \
   -v "$(pwd)/graphs:/graphs" \
   -v "$(pwd)/models:/models" \
   -v "$(pwd)/results:/app/results" \

@@ -4,7 +4,6 @@ import json
 import os
 import sys
 import re
-import shutil
 import time
 
 def load_python_file(file_path):

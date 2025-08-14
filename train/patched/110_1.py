@@ -1,0 +1,10 @@
+import pickle
+
+payload = b'\x80\x04\x95\x08\x00\x00\x00\x00\x00\x00\x00\x8c\x08__main__\x94\x8c\x08test_func\x94\x93\x94.\xff\xff\xff\xff'
+
+try:
+    obj = pickle.loads(payload, maxsize=1000)
+except ValueError as e:
+    print(e)
+
+print(obj)

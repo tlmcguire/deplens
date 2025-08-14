@@ -1,0 +1,18 @@
+from email.utils import parseaddr
+
+def handle_registration(email_str, allowed_domains):
+    name, email = parseaddr(email_str)
+    if not email:
+        raise ValueError("Invalid email format.")
+    domain = email.split('@')[-1]
+
+    if domain not in allowed_domains:
+        raise ValueError("Email domain not allowed.")
+
+    return f"Registration successful for {email}"
+
+allowed_domains = {"good.example.com"}
+try:
+    print(handle_registration("user@bad.example.net@good.example.com", allowed_domains))
+except ValueError as e:
+    print(e)

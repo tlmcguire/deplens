@@ -1,0 +1,16 @@
+import xml.etree.ElementTree as ET
+
+def vulnerable_parse_xml(xml_data):
+    try:
+        tree = ET.fromstring(xml_data.decode('utf-8', errors='ignore'))
+        return tree
+    except Exception as e:
+        print("Error:", e)
+        return None
+
+malicious_xml_data = b'<?xml version="1.0" encoding="UTF-8"?><root><element>\xED\xA0\x80</element></root>'
+result = vulnerable_parse_xml(malicious_xml_data)
+if result is not None:
+    print("XML parsed successfully.")
+else:
+    print("Failed to parse XML.")

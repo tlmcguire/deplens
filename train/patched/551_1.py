@@ -1,0 +1,14 @@
+import tempfile
+import os
+import stat
+
+def secure_temp_file():
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
+    os.chmod(temp_file.name, stat.S_IRUSR | stat.S_IWUSR)
+    return temp_file.name
+
+temp_file_path = secure_temp_file()
+with open(temp_file_path, 'w') as f:
+    f.write("Secure temporary file content.")
+
+os.remove(temp_file_path)

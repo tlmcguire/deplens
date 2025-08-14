@@ -1,4 +1,5 @@
-from datasets import load_dataset
-
-# Login using e.g. `huggingface-cli login` to access this dataset
-ds = load_dataset("FBogaerts/DeVAITP")
+#!/usr/bin/env python3
+"""
+LLM Security Bechmark
+This script is designed to measure the ability of LLMs to identify safe and unsafe code.
+"""

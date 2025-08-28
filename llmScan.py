@@ -6,6 +6,9 @@ import sys
 import re
 import time
 
+def hello():
+    print("Hello")
+
 def load_python_file(file_path):
     with open(file_path, 'r') as file:
         return file.read()
@@ -90,7 +93,7 @@ OLLAMA_URLS = [
     "http://127.0.0.1:11434",  # Local fallback
     "http://0.0.0.0:11434"     # Alternative fallback
 ]
-PRIMARY_MODEL = os.environ.get("OLLAMA_PRIMARY_MODEL", "llama3.1:8b")
+PRIMARY_MODEL = os.environ.get("OLLAMA_PRIMARY_MODEL", "gemma3:4b")
 FALLBACK_MODEL = os.environ.get("OLLAMA_FALLBACK_MODEL", "gemma3:4b")
 MAX_RETRIES = int(os.environ.get("OLLAMA_MAX_RETRIES", "3"))
 RETRY_DELAY = int(os.environ.get("OLLAMA_RETRY_DELAY", "5"))
@@ -126,22 +129,34 @@ def initialize_llm(model_name=None):
     
     raise RuntimeError(f"Failed to initialize LLM with any available URL after {MAX_RETRIES} attempts each")
 
-# Try to initialize with primary model, fall back to alternative if needed
-try:
-    model = initialize_llm(PRIMARY_MODEL)
-except Exception as e:
-    print(f"Primary model failed: {e}")
-    try:
-        print(f"Attempting fallback to {FALLBACK_MODEL}...")
-        model = initialize_llm(FALLBACK_MODEL)
-    except Exception as e:
-        print(f"Fallback model also failed: {e}")
-        model = None
-        print("WARNING: Running without a working LLM model. Scanning will fail.")
+# Global variables to store model and chain (initialized lazily)
+model = None
+chain = None
 
-prompt = ChatPromptTemplate.from_template(template)
-# Only create chain if model was successfully initialized
-chain = prompt | model if model is not None else None
+def get_model_and_chain():
+    """Lazy initialization of model and chain"""
+    global model, chain
+    
+    if model is None:
+        # Try to initialize with primary model, fall back to alternative if needed
+        try:
+            model = initialize_llm(PRIMARY_MODEL)
+        except Exception as e:
+            print(f"Primary model failed: {e}")
+            try:
+                print(f"Attempting fallback to {FALLBACK_MODEL}...")
+                model = initialize_llm(FALLBACK_MODEL)
+            except Exception as e:
+                print(f"Fallback model also failed: {e}")
+                model = None
+                print("WARNING: Running without a working LLM model. Scanning will fail.")
+        
+        # Create chain if model was successfully initialized
+        if model is not None:
+            prompt = ChatPromptTemplate.from_template(template)
+            chain = prompt | model
+    
+    return model, chain
 
 def scan_vulnerabilities(python_code_path):
     """
@@ -156,6 +171,9 @@ def scan_vulnerabilities(python_code_path):
             - result (dict or str): JSON analysis results if successful, error message if not
     """
     try:
+        # Get model and chain (lazy initialization)
+        model, chain = get_model_and_chain()
+        
         # Check if LLM is available
         if chain is None:
             return False, "Error: No working LLM model available"

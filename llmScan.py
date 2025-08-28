@@ -80,7 +80,7 @@ Return your analysis as a JSON dictionary with the following structure:
 """
 
 from langchain_ollama import __version__ as ollama_version
-print(f"Using langchain_ollama version: {ollama_version}")
+# print(f"Using langchain_ollama version: {ollama_version}")
 
 # Configure LLM settings from environment variables with defaults
 # Try multiple URLs for Ollama connection

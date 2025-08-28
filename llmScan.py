@@ -6,9 +6,6 @@ import sys
 import re
 import time
 
-def hello():
-    print("Hello")
-
 def load_python_file(file_path):
     with open(file_path, 'r') as file:
         return file.read()
@@ -134,7 +131,7 @@ model = None
 chain = None
 
 def get_model_and_chain():
-    """Lazy initialization of model and chain"""
+    """Initialization of model and chain"""
     global model, chain
     
     if model is None:

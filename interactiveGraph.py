@@ -42,6 +42,7 @@ import argparse
 from dash.exceptions import PreventUpdate
 import base64
 import datetime
+import socket
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -1421,9 +1422,47 @@ def export_ast_image(png_clicks, jpg_clicks, svg_clicks):
     else:
         raise PreventUpdate
 
+def _pick_port(preferred: int, max_attempts: int = 5) -> int:
+    """Return an available port starting at preferred, trying subsequent ports.
+    Only used inside the container to avoid immediate crash if port busy.
+    """
+    port = preferred
+    attempts = 0
+    while attempts < max_attempts:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind(("0.0.0.0", port))
+                # Successfully bound; port is free. Close and return.
+                return port
+            except OSError:
+                attempts += 1
+                port += 1
+    return preferred  # fall back; let Flask raise a clear error
+
 def main():
     initialize()
-    app.run(host='0.0.0.0', port=8080, debug=True)
+    # Port selection order: CLI arg > ENV > default 8080
+    requested_port = 8080
+    # CLI: allow `python interactiveGraph.py <package_or_mode> [port]`
+    if len(sys.argv) >= 3:
+        try:
+            requested_port = int(sys.argv[2])
+        except ValueError:
+            print(f"Ignoring invalid port argument: {sys.argv[2]}")
+    else:
+        env_port = os.environ.get("DEPLENS_PORT") or os.environ.get("PORT")
+        if env_port:
+            try:
+                requested_port = int(env_port)
+            except ValueError:
+                print(f"Ignoring invalid DEPLENS_PORT/PORT env value: {env_port}")
+
+    final_port = _pick_port(requested_port)
+    if final_port != requested_port:
+        print(f"Requested port {requested_port} busy. Using fallback port {final_port}.")
+    print(f"Starting server on 0.0.0.0:{final_port}")
+    app.run(host='0.0.0.0', port=final_port, debug=True)
 
 if __name__ == '__main__':
     main()

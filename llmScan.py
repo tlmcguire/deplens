@@ -5,6 +5,12 @@ import os
 import sys
 import re
 import time
+from typing import List
+
+try:
+    import requests
+except ImportError:  # Fallback if requests somehow missing in runtime image
+    requests = None
 
 def load_python_file(file_path):
     with open(file_path, 'r') as file:
@@ -83,48 +89,85 @@ from langchain_ollama import __version__ as ollama_version
 # print(f"Using langchain_ollama version: {ollama_version}")
 
 # Configure LLM settings from environment variables with defaults
-# Try multiple URLs for Ollama connection
-OLLAMA_URLS = [
-    os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),  # Default to localhost
-    "http://host.containers.internal:11434",  # Docker fallback
-    "http://127.0.0.1:11434",  # Local fallback
-    "http://0.0.0.0:11434"     # Alternative fallback
-]
-PRIMARY_MODEL = os.environ.get("OLLAMA_PRIMARY_MODEL", "gemma3:4b")
-FALLBACK_MODEL = os.environ.get("OLLAMA_FALLBACK_MODEL", "gemma3:4b")
+def _parse_ollama_urls() -> List[str]:
+    """Parse OLLAMA_URLS / OLLAMA_BASE_URL env vars into ordered list."""
+    # Allow comma separated list in OLLAMA_URLS, else fall back to single BASE_URL + defaults
+    raw = os.environ.get("OLLAMA_URLS")
+    if raw:
+        parts = [p.strip() for p in raw.split(',') if p.strip()]
+    else:
+        base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").strip()
+        parts = [base]
+    # Always append common fallbacks (deduplicated, preserve order)
+    fallbacks = [
+        "http://host.containers.internal:11434",  # Docker Desktop / some Podman setups
+        "http://127.0.0.1:11434",
+        "http://0.0.0.0:11434"
+    ]
+    seen = set()
+    ordered: List[str] = []
+    for url in parts + fallbacks:
+        if url not in seen:
+            ordered.append(url)
+            seen.add(url)
+    return ordered
+
+# Resolved list of candidate base URLs
+OLLAMA_URLS = _parse_ollama_urls()
+PRIMARY_MODEL = os.environ.get("OLLAMA_PRIMARY_MODEL", "phi4:14b")
+FALLBACK_MODEL = os.environ.get("OLLAMA_FALLBACK_MODEL", PRIMARY_MODEL)
 MAX_RETRIES = int(os.environ.get("OLLAMA_MAX_RETRIES", "3"))
 RETRY_DELAY = int(os.environ.get("OLLAMA_RETRY_DELAY", "5"))
+HEALTH_TIMEOUT = float(os.environ.get("OLLAMA_HEALTH_TIMEOUT", "1.2"))  # quick fail
+DISABLE_LLM = os.environ.get("DISABLE_LLM", "0").lower() in {"1", "true", "yes"}
+
+def _health_check(url: str) -> bool:
+    """Fast health check for an Ollama server. Returns True if reachable.
+    Tries /api/tags (cheap) with a short timeout. Skips if requests missing.
+    """
+    if requests is None:
+        return True  # assume okay if we cannot verify
+    try:
+        resp = requests.get(url.rstrip('/') + '/api/tags', timeout=HEALTH_TIMEOUT)
+        return resp.status_code < 500
+    except Exception:
+        return False
 
 def initialize_llm(model_name=None):
-    """Initialize the LLM with retries and proper error handling"""
+    """Initialize the LLM with retries and health checks.
+
+    Respects DISABLE_LLM to short‑circuit initialization.
+    """
+    if DISABLE_LLM:
+        raise RuntimeError("LLM disabled by DISABLE_LLM environment variable")
+
     model_name = model_name or PRIMARY_MODEL
-    
-    # Try each URL until one works
+    failed_urls = []
     for base_url in OLLAMA_URLS:
+        if not _health_check(base_url):
+            print(f"Skipping {base_url} (health check failed)")
+            failed_urls.append((base_url, "health check failed"))
+            continue
         retries = 0
         while retries < MAX_RETRIES:
             try:
                 print(f"Attempting to initialize LLM with model {model_name} at {base_url}...")
-                model = OllamaLLM(
-                    model=model_name,
-                    temperature=0,
-                    base_url=base_url
-                )
-                # Test the model with a simple request to verify connection
-                _ = model.invoke("Test connection")
+                model = OllamaLLM(model=model_name, temperature=0, base_url=base_url)
+                _ = model.invoke("ping")  # simple call
                 print(f"Successfully initialized model: {model_name} at {base_url}")
                 return model
             except Exception as e:
                 retries += 1
-                print(f"Attempt {retries}/{MAX_RETRIES} failed for {base_url}: {str(e)}")
+                msg = str(e)
+                print(f"Attempt {retries}/{MAX_RETRIES} failed for {base_url}: {msg}")
                 if retries < MAX_RETRIES:
-                    print(f"Retrying in {RETRY_DELAY} seconds...")
                     time.sleep(RETRY_DELAY)
                 else:
+                    failed_urls.append((base_url, msg))
                     print(f"Failed to connect to {base_url} after {MAX_RETRIES} attempts")
-                    break  # Try next URL
-    
-    raise RuntimeError(f"Failed to initialize LLM with any available URL after {MAX_RETRIES} attempts each")
+                    break
+    detail = "; ".join(f"{u}: {m}" for u,m in failed_urls) or "no candidate URLs"
+    raise RuntimeError(f"Failed to initialize LLM. Tried {len(OLLAMA_URLS)} URLs. Details: {detail}")
 
 # Global variables to store model and chain (initialized lazily)
 model = None
@@ -140,13 +183,15 @@ def get_model_and_chain():
             model = initialize_llm(PRIMARY_MODEL)
         except Exception as e:
             print(f"Primary model failed: {e}")
-            try:
-                print(f"Attempting fallback to {FALLBACK_MODEL}...")
-                model = initialize_llm(FALLBACK_MODEL)
-            except Exception as e:
-                print(f"Fallback model also failed: {e}")
-                model = None
-                print("WARNING: Running without a working LLM model. Scanning will fail.")
+            if FALLBACK_MODEL != PRIMARY_MODEL:
+                try:
+                    print(f"Attempting fallback to {FALLBACK_MODEL}...")
+                    model = initialize_llm(FALLBACK_MODEL)
+                except Exception as fe:
+                    print(f"Fallback model also failed: {fe}")
+                    model = None
+            if model is None:
+                print("WARNING: No working LLM model. Set DISABLE_LLM=1 to suppress this warning.")
         
         # Create chain if model was successfully initialized
         if model is not None:
@@ -173,7 +218,13 @@ def scan_vulnerabilities(python_code_path):
         
         # Check if LLM is available
         if chain is None:
-            return False, "Error: No working LLM model available"
+            guidance = (
+                "Error: No working LLM model available. "
+                "To enable: ensure an Ollama server is running and accessible from the container. "
+                "Examples: host 'ollama serve' then run container with '--network host' (Linux) or add host mapping. "
+                "Or set DISABLE_LLM=1 to skip LLM scans gracefully."
+            )
+            return False, guidance
             
         # Load Python code
         python_code = load_python_file(python_code_path)
